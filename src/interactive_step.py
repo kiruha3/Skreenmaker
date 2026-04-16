@@ -101,33 +101,62 @@ async def _execute_action(browser: BrowserController, action: AgentAction):
         return
 
     if action.action_type == "click" and action.element_display_id is not None:
-        fresh_elements, fresh_map = await browser.get_interactive_elements()
+        _, fresh_map = await browser.get_interactive_elements()
         target = fresh_map.get(action.element_display_id)
         if target:
             await browser.click_by_coords(target.cx, target.cy)
         return
 
+    if action.action_type == "right_click" and action.element_display_id is not None:
+        _, fresh_map = await browser.get_interactive_elements()
+        target = fresh_map.get(action.element_display_id)
+        if target:
+            await browser._page.mouse.click(target.cx, target.cy, button="right")
+        return
+
+    if action.action_type == "hover" and action.element_display_id is not None:
+        _, fresh_map = await browser.get_interactive_elements()
+        target = fresh_map.get(action.element_display_id)
+        if target:
+            await browser.hover(target.cx, target.cy)
+        return
+
     if action.action_type == "type" and action.element_display_id is not None and action.text:
-        fresh_elements, fresh_map = await browser.get_interactive_elements()
+        _, fresh_map = await browser.get_interactive_elements()
         target = fresh_map.get(action.element_display_id)
         if target:
             await browser.click_by_coords(target.cx, target.cy)
             await browser._page.keyboard.type(action.text)
         return
 
+    if action.action_type == "press_key" and action.key:
+        await browser.press_key(action.key)
+        return
+
     if action.action_type == "scroll":
         await browser.scroll(action.direction or "down", action.amount or 300)
         return
 
-    if action.action_type == "hover" and action.element_display_id is not None:
-        fresh_elements, fresh_map = await browser.get_interactive_elements()
+    if action.action_type == "select_option" and action.element_display_id is not None:
+        _, fresh_map = await browser.get_interactive_elements()
         target = fresh_map.get(action.element_display_id)
-        if target:
-            await browser.hover(target.cx, target.cy)
+        if target and target.selector:
+            val = action.option_value or action.text or ""
+            await browser.select_option(target.selector, val)
         return
 
-    if action.action_type == "press_key" and action.key:
-        await browser.press_key(action.key)
+    if action.action_type == "upload_file" and action.element_display_id is not None:
+        _, fresh_map = await browser.get_interactive_elements()
+        target = fresh_map.get(action.element_display_id)
+        if target and target.selector and action.file_path:
+            await browser.upload_file(target.selector, action.file_path)
+        return
+
+    if action.action_type == "switch_tab" and action.tab_index is not None:
+        pages = browser._context.pages
+        if 0 <= action.tab_index < len(pages):
+            browser._page = pages[action.tab_index]
+            await browser._page.bring_to_front()
         return
 
     if action.action_type == "screenshot" and action.filename:
