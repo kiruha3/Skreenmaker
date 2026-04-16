@@ -43,7 +43,7 @@ async def run_step(url: str, history: list, output_dir: str):
         for i, action_data in enumerate(history):
             action = AgentAction(**action_data)
             try:
-                await _execute_action(browser, action, {})
+                await _execute_action(browser, action)
             except Exception as e:
                 # Если страница перезагрузилась (например, после login), подождем немного
                 print(f"  Replayed action {i+1}: {action.action_type} (navigation detected, waiting...)")
@@ -56,16 +56,16 @@ async def run_step(url: str, history: list, output_dir: str):
         raw_path = os.path.join(output_dir, f"step_{step_num}_raw.jpg")
         await browser.screenshot(raw_path)
 
-        elements = await browser.get_interactive_elements()
+        elements, elements_map = await browser.get_interactive_elements()
         annotated_path = os.path.join(output_dir, f"step_{step_num}_annotated.jpg")
-        _, elements_map = draw_overlay(raw_path, elements, annotated_path)
+        _, overlay_map = draw_overlay(raw_path, elements, annotated_path)
 
         # Сохраняем текущее состояние
         current_state = {
             "step": step_num,
             "url": url,
             "history": history,
-            "elements": elements_map,
+            "elements": overlay_map,
             "annotated_screenshot": annotated_path,
             "raw_screenshot": raw_path,
         }
@@ -81,52 +81,53 @@ async def run_step(url: str, history: list, output_dir: str):
         print(f"Annotated screenshot: {annotated_path}")
         print(f"Raw screenshot: {raw_path}")
         print(f"State file: {state_path}")
-        print(f"\nInteractive elements ({len(elements_map)}):")
-        for eid, info in elements_map.items():
-            print(f"  {eid}. [{info['tag']}] '{info['text']}'")
+        print(f"\nInteractive elements ({len(overlay_map)}):")
+        for display_id, info in overlay_map.items():
+            print(f"  {display_id}. [{info['tag']}] '{info['text']}'")
 
         print("\nNext: analyze the annotated screenshot and provide the next action.")
         print("Run:")
-        next_history = history + [{"action_type": "YOUR_ACTION", "element_id": 1}]
+        next_history = history + [{"action_type": "YOUR_ACTION", "element_display_id": 1}]
         print(f'  python -m src.interactive_step --url "{url}" --history \'{json.dumps(next_history, ensure_ascii=False)}\'')
 
     finally:
         await browser.close()
 
 
-async def _execute_action(browser, action: AgentAction, elements_map: dict):
+async def _execute_action(browser: BrowserController, action: AgentAction):
     """Выполняет одно действие. Для replay используем упрощенную логику."""
     if action.action_type == "navigate" and action.url:
         await browser.navigate(action.url)
         return
 
-    if action.action_type == "click" and action.element_id is not None:
-        # Нужно получить свежие элементы, так как elements_map может быть устаревшим
-        fresh_elements = await browser.get_interactive_elements()
-        target = None
-        for el in fresh_elements:
-            if el.element_id == action.element_id:
-                target = el
-                break
+    if action.action_type == "click" and action.element_display_id is not None:
+        fresh_elements, fresh_map = await browser.get_interactive_elements()
+        target = fresh_map.get(action.element_display_id)
         if target:
-            await browser.click_by_coords(target.x + target.width / 2, target.y + target.height / 2)
+            await browser.click_by_coords(target.cx, target.cy)
         return
 
-    if action.action_type == "type" and action.element_id is not None and action.text:
-        fresh_elements = await browser.get_interactive_elements()
-        target = None
-        for el in fresh_elements:
-            if el.element_id == action.element_id:
-                target = el
-                break
+    if action.action_type == "type" and action.element_display_id is not None and action.text:
+        fresh_elements, fresh_map = await browser.get_interactive_elements()
+        target = fresh_map.get(action.element_display_id)
         if target:
-            await browser.click_by_coords(target.x + target.width / 2, target.y + target.height / 2)
-            # После клика фокус уже установлен — используем keyboard.type для точности
+            await browser.click_by_coords(target.cx, target.cy)
             await browser._page.keyboard.type(action.text)
         return
 
     if action.action_type == "scroll":
         await browser.scroll(action.direction or "down", action.amount or 300)
+        return
+
+    if action.action_type == "hover" and action.element_display_id is not None:
+        fresh_elements, fresh_map = await browser.get_interactive_elements()
+        target = fresh_map.get(action.element_display_id)
+        if target:
+            await browser.hover(target.cx, target.cy)
+        return
+
+    if action.action_type == "press_key" and action.key:
+        await browser.press_key(action.key)
         return
 
     if action.action_type == "screenshot" and action.filename:

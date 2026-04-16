@@ -51,14 +51,14 @@ class BrowserAgent:
                 await self.browser.screenshot(raw_screenshot)
 
                 # 2. Интерактивные элементы
-                elements = await self.browser.get_interactive_elements()
+                elements, elements_map = await self.browser.get_interactive_elements()
 
                 # 3. Overlay
                 annotated = os.path.join(self.output_dir, f"step_{step}_annotated.jpg")
-                _, elements_map = draw_overlay(raw_screenshot, elements, annotated)
+                _, overlay_map = draw_overlay(raw_screenshot, elements, annotated)
 
                 # 4. Формируем промпт
-                elements_list = build_elements_list(elements_map)
+                elements_list = build_elements_list(overlay_map)
                 system_prompt = SYSTEM_PROMPT.format(elements_list=elements_list)
 
                 # 5. Запрос к LLM
@@ -117,22 +117,40 @@ class BrowserAgent:
             return "No URL provided for navigate"
 
         if action.action_type == "click":
-            if action.element_id and action.element_id in elements_map:
-                info = elements_map[action.element_id]
+            if action.element_display_id and action.element_display_id in elements_map:
+                info = elements_map[action.element_display_id]
                 await self.browser.click_by_coords(info["cx"], info["cy"])
-                return f"Clicked element {action.element_id} ({info['tag']}: {info['text']})"
-            return f"Element {action.element_id} not found on current screen"
+                return f"Clicked element {action.element_display_id} ({info['tag']}: {info['text']})"
+            return f"Element {action.element_display_id} not found on current screen"
+
+        if action.action_type == "right_click":
+            if action.element_display_id and action.element_display_id in elements_map:
+                info = elements_map[action.element_display_id]
+                await self.browser._page.mouse.click(info["cx"], info["cy"], button="right")
+                return f"Right-clicked element {action.element_display_id}"
+            return f"Element {action.element_display_id} not found"
+
+        if action.action_type == "hover":
+            if action.element_display_id and action.element_display_id in elements_map:
+                info = elements_map[action.element_display_id]
+                await self.browser.hover(info["cx"], info["cy"])
+                return f"Hovered element {action.element_display_id}"
+            return f"Element {action.element_display_id} not found"
 
         if action.action_type == "type":
-            if action.element_id and action.element_id in elements_map:
-                info = elements_map[action.element_id]
-                # Сначала кликнем, чтобы сфокусировать, потом введем текст через keyboard
+            if action.element_display_id and action.element_display_id in elements_map:
+                info = elements_map[action.element_display_id]
                 await self.browser.click_by_coords(info["cx"], info["cy"])
                 if action.text:
                     await self.browser._page.keyboard.type(action.text)
-                    return f"Typed '{action.text}' into element {action.element_id}"
+                    return f"Typed '{action.text}' into element {action.element_display_id}"
                 return "No text provided for type"
-            return f"Element {action.element_id} not found for typing"
+            return f"Element {action.element_display_id} not found for typing"
+
+        if action.action_type == "press_key":
+            key = action.key or "Enter"
+            await self.browser.press_key(key)
+            return f"Pressed key {key}"
 
         if action.action_type == "scroll":
             direction = action.direction or "down"

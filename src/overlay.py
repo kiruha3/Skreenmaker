@@ -1,21 +1,35 @@
 from typing import List, Tuple, Dict, Any
 from PIL import Image, ImageDraw, ImageFont
-from src.browser import InteractiveElement
+
+from src.element_tracker import TrackedElement
+
+
+ELEMENT_COLORS = {
+    "a": "red",
+    "button": "blue",
+    "input": "green",
+    "textarea": "orange",
+    "select": "purple",
+    "default": "red",
+}
+
+
+def _get_color(tag: str) -> str:
+    return ELEMENT_COLORS.get(tag, ELEMENT_COLORS["default"])
 
 
 def draw_overlay(
     screenshot_path: str,
-    elements: List[InteractiveElement],
+    elements: List[TrackedElement],
     output_path: str,
 ) -> Tuple[str, Dict[int, Dict[str, Any]]]:
     """
     Рисует на скриншоте номера интерактивных элементов.
-    Возвращает путь к аннотированному изображению и словарь element_id -> info.
+    Возвращает путь к аннотированному изображению и словарь display_id -> info.
     """
     img = Image.open(screenshot_path)
     draw = ImageDraw.Draw(img)
 
-    # Попробуем использовать шрифт по умолчанию, но с увеличенным размером
     try:
         font = ImageFont.truetype("arial.ttf", 14)
     except Exception:
@@ -24,19 +38,17 @@ def draw_overlay(
     element_map: Dict[int, Dict[str, Any]] = {}
 
     for el in elements:
-        # Центр элемента
-        cx = el.x + el.width / 2
-        cy = el.y + el.height / 2
+        color = _get_color(el.tag)
 
         # Рамка
         draw.rectangle(
             [(el.x, el.y), (el.x + el.width, el.y + el.height)],
-            outline="red",
+            outline=color,
             width=2,
         )
 
-        # Номер в кружке/прямоугольнике
-        label = str(el.element_id)
+        # Номер в прямоугольнике
+        label = str(el.display_id)
         bbox = draw.textbbox((0, 0), label, font=font)
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
@@ -48,7 +60,7 @@ def draw_overlay(
 
         draw.rectangle(
             [(label_x, label_y), (label_x + text_w + pad * 2, label_y + text_h + pad * 2)],
-            fill="red",
+            fill=color,
         )
         draw.text(
             (label_x + pad, label_y + pad),
@@ -57,12 +69,13 @@ def draw_overlay(
             font=font,
         )
 
-        element_map[el.element_id] = {
+        element_map[el.display_id] = {
+            "stable_hash": el.stable_hash,
             "tag": el.tag,
             "text": el.text,
             "selector": el.selector,
-            "cx": cx,
-            "cy": cy,
+            "cx": el.cx,
+            "cy": el.cy,
             "x": el.x,
             "y": el.y,
             "width": el.width,

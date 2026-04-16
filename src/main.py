@@ -4,6 +4,7 @@ import os
 import sys
 
 from src.agent import BrowserAgent
+from src.config import load_config
 
 
 def main():
@@ -15,24 +16,31 @@ def main():
     parser.add_argument("--max-steps", type=int, default=15, help="Максимальное число шагов")
     parser.add_argument("--output-dir", type=str, default="output", help="Папка для скриншотов")
     parser.add_argument("--model", type=str, default="gpt-4o", help="Модель OpenAI Vision")
-    parser.add_argument("--api-key", type=str, default=os.environ.get("OPENAI_API_KEY"), help="OpenAI API ключ")
-
+    parser.add_argument("--api-key", type=str, default=None, help="OpenAI API ключ")
+    parser.add_argument("--config", type=str, default=None, help="Путь к config.yaml")
     args = parser.parse_args()
 
-    if not args.api_key:
+    # Загружаем конфигурацию
+    cfg = load_config(args.config)
+
+    api_key = args.api_key or cfg.api_key or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
         print("Ошибка: нужен OpenAI API ключ. Установите OPENAI_API_KEY или передайте --api-key")
         sys.exit(1)
 
     headless = False if args.headless_false else args.headless
+    output_dir = args.output_dir or cfg.output_dir
+    max_steps = args.max_steps or cfg.max_steps
+    model = args.model or cfg.model
 
     agent = BrowserAgent(
         task=args.task,
         start_url=args.url,
         headless=headless,
-        max_steps=args.max_steps,
-        output_dir=args.output_dir,
-        api_key=args.api_key,
-        model=args.model,
+        max_steps=max_steps,
+        output_dir=output_dir,
+        api_key=api_key,
+        model=model,
     )
 
     result = asyncio.run(agent.run())

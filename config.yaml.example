@@ -1,0 +1,12 @@
+# Пример конфигурации SkreenMaker
+
+llm_provider: openai  # openai | ollama | anthropic
+api_key: "sk-..."
+model: gpt-4o
+base_url: null
+
+viewport_width: 1280
+viewport_height: 720
+headless: true
+output_dir: output
+max_steps: 15

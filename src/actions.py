@@ -8,6 +8,14 @@ class AgentAction(BaseModel):
         "click",
         "type",
         "scroll",
+        "hover",
+        "press_key",
+        "select_option",
+        "upload_file",
+        "switch_tab",
+        "dismiss_alert",
+        "accept_alert",
+        "right_click",
         "screenshot",
         "wait",
         "finish",
@@ -19,19 +27,36 @@ class AgentAction(BaseModel):
         description="Краткое объяснение, почему выбрано это действие",
     )
 
-    url: Optional[str] = Field(
-        default=None,
-        description="URL для действия navigate",
-    )
+    url: Optional[str] = Field(default=None, description="URL для действия navigate")
 
-    element_id: Optional[int] = Field(
+    element_display_id: Optional[int] = Field(
         default=None,
-        description="ID пронумерованного элемента для click/type",
+        description="ID пронумерованного элемента для click/type/hover/right_click/upload_file/select_option",
     )
 
     text: Optional[str] = Field(
         default=None,
-        description="Текст для ввода в поле (type)",
+        description="Текст для ввода в поле (type) или option_text (select_option)",
+    )
+
+    key: Optional[str] = Field(
+        default=None,
+        description="Клавиша для press_key (Enter, Escape, Tab, ArrowDown, etc.)",
+    )
+
+    option_value: Optional[str] = Field(
+        default=None,
+        description="Value опции для select_option",
+    )
+
+    file_path: Optional[str] = Field(
+        default=None,
+        description="Путь к файлу для upload_file",
+    )
+
+    tab_index: Optional[int] = Field(
+        default=None,
+        description="Индекс вкладки для switch_tab",
     )
 
     direction: Optional[Literal["up", "down", "left", "right"]] = Field(
