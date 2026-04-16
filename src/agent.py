@@ -28,6 +28,7 @@ class BrowserAgent:
         api_key: Optional[str] = None,
         model: str = "gpt-4o",
         base_url: Optional[str] = None,
+        resume: bool = False,
     ):
         self.task = task
         self.start_url = start_url
@@ -42,16 +43,45 @@ class BrowserAgent:
             base_url=base_url,
         )
         self.history: List[Dict[str, Any]] = []
+        self.resume = resume
+        self._state_path = os.path.join(self.output_dir, "agent_state.json")
 
         os.makedirs(self.output_dir, exist_ok=True)
+
+        if self.resume:
+            self._load_state()
+
+    def _load_state(self):
+        if os.path.exists(self._state_path):
+            try:
+                with open(self._state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                self.history = state.get("history", [])
+                self.start_url = state.get("current_url", self.start_url)
+                console.print(f"[yellow]Resumed session from step {len(self.history)}[/yellow]")
+            except Exception as e:
+                console.print(f"[red]Failed to load state: {e}[/red]")
+
+    def _save_state(self, current_url: str):
+        state = {
+            "history": self.history,
+            "current_url": current_url,
+            "task": self.task,
+        }
+        try:
+            with open(self._state_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            console.print(f"[red]Failed to save state: {e}[/red]")
 
     async def run(self) -> Dict[str, Any]:
         await self.browser.launch(headless=self.headless)
         try:
-            if self.start_url:
+            starting_step = len(self.history) + 1
+            if self.start_url and starting_step == 1:
                 await self.browser.navigate(self.start_url)
 
-            for step in range(1, self.max_steps + 1):
+            for step in range(starting_step, self.max_steps + 1):
                 console.rule(f"[bold cyan]Step {step}/{self.max_steps}")
 
                 # 1. Скриншот
@@ -101,6 +131,10 @@ class BrowserAgent:
                     "observation": observation,
                     "action": action.model_dump(exclude_none=True),
                 })
+
+                # 9. Сохраняем состояние сессии
+                current_url = self.browser._page.url
+                self._save_state(current_url)
 
                 if action.action_type in ("finish", "fail"):
                     break

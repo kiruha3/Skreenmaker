@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--api-key", type=str, default=None, help="API ключ")
     parser.add_argument("--base-url", type=str, default=None, help="Base URL для API")
     parser.add_argument("--config", type=str, default=None, help="Путь к config.yaml")
+    parser.add_argument("--resume", action="store_true", help="Возобновить прерванную сессию из agent_state.json")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -52,6 +53,7 @@ def main():
         api_key=api_key,
         model=model,
         base_url=base_url,
+        resume=args.resume,
     )
 
     result = asyncio.run(agent.run())
