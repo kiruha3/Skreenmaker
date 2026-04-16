@@ -1,0 +1,160 @@
+import argparse
+import asyncio
+import json
+import os
+import sys
+
+from src.browser import BrowserController
+from src.overlay import draw_overlay
+from src.actions import AgentAction
+
+
+def load_history(history_str: str):
+    try:
+        return json.loads(history_str)
+    except Exception as e:
+        print(f"Failed to parse history JSON: {e}")
+        sys.exit(1)
+
+
+async def run_step(url: str, history: list, output_dir: str):
+    os.makedirs(output_dir, exist_ok=True)
+    state_dir = os.path.join(output_dir, "state")
+    os.makedirs(state_dir, exist_ok=True)
+
+    storage_path = os.path.join(state_dir, "storage_state.json")
+
+    browser = BrowserController()
+    await browser.launch(headless=True)
+    try:
+        # Восстанавливаем storage state если есть
+        if os.path.exists(storage_path) and browser._context:
+            # Пересоздаем context с storage state
+            await browser._context.close()
+            browser._context = await browser._browser.new_context(
+                viewport={"width": browser.viewport_width, "height": browser.viewport_height},
+                storage_state=storage_path,
+            )
+            browser._page = await browser._context.new_page()
+
+        await browser.navigate(url)
+
+        # Воспроизводим всю историю действий
+        for i, action_data in enumerate(history):
+            action = AgentAction(**action_data)
+            try:
+                await _execute_action(browser, action, {})
+            except Exception as e:
+                # Если страница перезагрузилась (например, после login), подождем немного
+                print(f"  Replayed action {i+1}: {action.action_type} (navigation detected, waiting...)")
+                import asyncio
+                await asyncio.sleep(1.5)
+            print(f"  Replayed action {i+1}: {action.action_type}")
+
+        # Делаем скриншот текущего состояния
+        step_num = len(history) + 1
+        raw_path = os.path.join(output_dir, f"step_{step_num}_raw.jpg")
+        await browser.screenshot(raw_path)
+
+        elements = await browser.get_interactive_elements()
+        annotated_path = os.path.join(output_dir, f"step_{step_num}_annotated.jpg")
+        _, elements_map = draw_overlay(raw_path, elements, annotated_path)
+
+        # Сохраняем текущее состояние
+        current_state = {
+            "step": step_num,
+            "url": url,
+            "history": history,
+            "elements": elements_map,
+            "annotated_screenshot": annotated_path,
+            "raw_screenshot": raw_path,
+        }
+        state_path = os.path.join(state_dir, "current_state.json")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(current_state, f, ensure_ascii=False, indent=2)
+
+        # Сохраняем storage state для следующего шага
+        if browser._context:
+            await browser._context.storage_state(path=storage_path)
+
+        print(f"\n=== STEP {step_num} COMPLETE ===")
+        print(f"Annotated screenshot: {annotated_path}")
+        print(f"Raw screenshot: {raw_path}")
+        print(f"State file: {state_path}")
+        print(f"\nInteractive elements ({len(elements_map)}):")
+        for eid, info in elements_map.items():
+            print(f"  {eid}. [{info['tag']}] '{info['text']}'")
+
+        print("\nNext: analyze the annotated screenshot and provide the next action.")
+        print("Run:")
+        next_history = history + [{"action_type": "YOUR_ACTION", "element_id": 1}]
+        print(f'  python -m src.interactive_step --url "{url}" --history \'{json.dumps(next_history, ensure_ascii=False)}\'')
+
+    finally:
+        await browser.close()
+
+
+async def _execute_action(browser, action: AgentAction, elements_map: dict):
+    """Выполняет одно действие. Для replay используем упрощенную логику."""
+    if action.action_type == "navigate" and action.url:
+        await browser.navigate(action.url)
+        return
+
+    if action.action_type == "click" and action.element_id is not None:
+        # Нужно получить свежие элементы, так как elements_map может быть устаревшим
+        fresh_elements = await browser.get_interactive_elements()
+        target = None
+        for el in fresh_elements:
+            if el.element_id == action.element_id:
+                target = el
+                break
+        if target:
+            await browser.click_by_coords(target.x + target.width / 2, target.y + target.height / 2)
+        return
+
+    if action.action_type == "type" and action.element_id is not None and action.text:
+        fresh_elements = await browser.get_interactive_elements()
+        target = None
+        for el in fresh_elements:
+            if el.element_id == action.element_id:
+                target = el
+                break
+        if target:
+            await browser.click_by_coords(target.x + target.width / 2, target.y + target.height / 2)
+            # После клика фокус уже установлен — используем keyboard.type для точности
+            await browser._page.keyboard.type(action.text)
+        return
+
+    if action.action_type == "scroll":
+        await browser.scroll(action.direction or "down", action.amount or 300)
+        return
+
+    if action.action_type == "screenshot" and action.filename:
+        path = os.path.join("output", action.filename)
+        await browser.screenshot(path)
+        return
+
+    if action.action_type == "wait":
+        import asyncio
+        await asyncio.sleep(action.seconds or 1)
+        return
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Interactive browser step for Kimi")
+    parser.add_argument("--url", type=str, required=True, help="URL")
+    parser.add_argument("--history", type=str, default="[]", help="JSON array of previous AgentAction objects")
+    parser.add_argument("--history-file", type=str, default=None, help="Path to JSON file with previous actions")
+    parser.add_argument("--output-dir", type=str, default="output", help="Output directory")
+    args = parser.parse_args()
+
+    if args.history_file:
+        with open(args.history_file, "r", encoding="utf-8") as f:
+            history = json.load(f)
+    else:
+        history = load_history(args.history)
+    asyncio.run(run_step(args.url, history, args.output_dir))
+
+
+if __name__ == "__main__":
+    main()

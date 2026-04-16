@@ -1,0 +1,119 @@
+{
+  "start_time": "2026-04-17T01:08:06.897579",
+  "steps": [
+    {
+      "name": "Логин",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\01_after_login_raw.jpg",
+      "time": "2026-04-17T01:08:12.073135"
+    },
+    {
+      "name": "Дашборд",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\02_dashboard_raw.jpg",
+      "time": "2026-04-17T01:08:14.811463"
+    },
+    {
+      "name": "Курсы",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\03_courses_raw.jpg",
+      "time": "2026-04-17T01:08:17.536565"
+    },
+    {
+      "name": "DreamDocs (верх)",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\04_dreamdocs_top_raw.jpg",
+      "time": "2026-04-17T01:08:20.924427"
+    },
+    {
+      "name": "DreamDocs (скролл)",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\05_dreamdocs_scrolled_raw.jpg",
+      "time": "2026-04-17T01:08:22.468085"
+    },
+    {
+      "name": "Модули DreamDocs",
+      "status": "ok",
+      "details": "[]",
+      "screenshot": "",
+      "time": "2026-04-17T01:08:22.470168"
+    },
+    {
+      "name": "Книга",
+      "status": "warn",
+      "details": "Не удалось кликнуть",
+      "screenshot": "",
+      "time": "2026-04-17T01:08:25.482103"
+    },
+    {
+      "name": "DreamDocs модули",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\07_dreamdocs_modules_raw.jpg",
+      "time": "2026-04-17T01:08:29.634804"
+    },
+    {
+      "name": "Тест раскрыт",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\08_quiz_opened_raw.jpg",
+      "time": "2026-04-17T01:08:32.930529"
+    },
+    {
+      "name": "Тест начат",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\09_quiz_started_raw.jpg",
+      "time": "2026-04-17T01:08:36.516029"
+    },
+    {
+      "name": "Ответы выбраны",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\10_quiz_answered_raw.jpg",
+      "time": "2026-04-17T01:08:43.429633"
+    },
+    {
+      "name": "Тест завершён",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\11_quiz_finished_raw.jpg",
+      "time": "2026-04-17T01:08:47.214035"
+    },
+    {
+      "name": "Прогресс после теста",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\12_progress_after_quiz_raw.jpg",
+      "time": "2026-04-17T01:08:51.361618"
+    },
+    {
+      "name": "Car Repair",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\13_car_repair_raw.jpg",
+      "time": "2026-04-17T01:08:53.975209"
+    },
+    {
+      "name": "Car Repair пустой",
+      "status": "warn",
+      "details": "Курс отображается как пустой",
+      "screenshot": "",
+      "time": "2026-04-17T01:08:53.978206"
+    },
+    {
+      "name": "Форум открыт",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test_v3\\14_forum_opened_raw.jpg",
+      "time": "2026-04-17T01:09:01.362227"
+    }
+  ],
+  "bugs": [],
+  "end_time": "2026-04-17T01:09:01.443288"
+}

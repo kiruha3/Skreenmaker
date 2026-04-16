@@ -1,0 +1,112 @@
+{
+  "start_time": "2026-04-17T00:53:48.099221",
+  "steps": [
+    {
+      "name": "Страница логина",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\01_login_page_raw.jpg",
+      "time": "2026-04-17T00:53:51.274089"
+    },
+    {
+      "name": "Логин заполнен",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\02_login_filled_raw.jpg",
+      "time": "2026-04-17T00:53:53.428846"
+    },
+    {
+      "name": "После логина",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\03_after_login_raw.jpg",
+      "time": "2026-04-17T00:53:57.607347"
+    },
+    {
+      "name": "Дашборд",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\04_dashboard_raw.jpg",
+      "time": "2026-04-17T00:53:59.871468"
+    },
+    {
+      "name": "Список курсов",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\05_courses_list_raw.jpg",
+      "time": "2026-04-17T00:54:02.108988"
+    },
+    {
+      "name": "Курс DreamDocs",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\06_course_dreamdocs_raw.jpg",
+      "time": "2026-04-17T00:54:04.229507"
+    },
+    {
+      "name": "Курс DreamDocs (прокрутка)",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\07_course_scrolled_raw.jpg",
+      "time": "2026-04-17T00:54:06.325397"
+    },
+    {
+      "name": "Тест",
+      "status": "warn",
+      "details": "Модуль теста не найден",
+      "screenshot": "",
+      "time": "2026-04-17T00:54:06.325397"
+    },
+    {
+      "name": "Возврат к курсу",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\12_back_to_course_raw.jpg",
+      "time": "2026-04-17T00:54:08.508348"
+    },
+    {
+      "name": "Книга",
+      "status": "warn",
+      "details": "Модуль книги не найден",
+      "screenshot": "",
+      "time": "2026-04-17T00:54:08.508348"
+    },
+    {
+      "name": "Курс после книги",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\14_course_after_book_raw.jpg",
+      "time": "2026-04-17T00:54:10.673109"
+    },
+    {
+      "name": "Форум",
+      "status": "warn",
+      "details": "Модуль форума не найден",
+      "screenshot": "",
+      "time": "2026-04-17T00:54:10.673109"
+    },
+    {
+      "name": "Проверка прогресса",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\16_course_progress_raw.jpg",
+      "time": "2026-04-17T00:54:12.860878"
+    },
+    {
+      "name": "Список курсов (повторно)",
+      "status": "ok",
+      "details": "",
+      "screenshot": "output/dreamdox_academy_test\\17_courses_list_2_raw.jpg",
+      "time": "2026-04-17T00:54:15.086196"
+    },
+    {
+      "name": "Car Repair",
+      "status": "warn",
+      "details": "Курс не найден в списке",
+      "screenshot": "",
+      "time": "2026-04-17T00:54:15.086196"
+    }
+  ],
+  "bugs": [],
+  "end_time": "2026-04-17T00:54:15.179335"
+}
