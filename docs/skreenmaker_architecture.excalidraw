@@ -1,0 +1,828 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "",
+  "elements": [
+    {
+      "id": "cli-main",
+      "type": "rectangle",
+      "x": 50,
+      "y": 30,
+      "width": 140,
+      "height": 50,
+      "backgroundColor": "#e3f2fd",
+      "strokeColor": "#1976d2",
+      "label": {
+        "text": "CLI Main\n(--url --task)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "cli-step",
+      "type": "rectangle",
+      "x": 280,
+      "y": 30,
+      "width": 180,
+      "height": 50,
+      "backgroundColor": "#e3f2fd",
+      "strokeColor": "#1976d2",
+      "label": {
+        "text": "CLI Interactive Step\n(--history)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "web-tui",
+      "type": "rectangle",
+      "x": 530,
+      "y": 30,
+      "width": 150,
+      "height": 50,
+      "backgroundColor": "#e3f2fd",
+      "strokeColor": "#1976d2",
+      "label": {
+        "text": "Web TUI\n(localhost:8080)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "browser",
+      "type": "rectangle",
+      "x": 300,
+      "y": 130,
+      "width": 220,
+      "height": 60,
+      "backgroundColor": "#fff3e0",
+      "strokeColor": "#f57c00",
+      "label": {
+        "text": "BrowserController\n(Playwright + Chromium)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "tracker",
+      "type": "rectangle",
+      "x": 30,
+      "y": 230,
+      "width": 180,
+      "height": 50,
+      "backgroundColor": "#e8f5e9",
+      "strokeColor": "#388e3c",
+      "label": {
+        "text": "Element Tracker\n(stable hashes + dedup)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "overlay",
+      "type": "rectangle",
+      "x": 260,
+      "y": 230,
+      "width": 170,
+      "height": 50,
+      "backgroundColor": "#e8f5e9",
+      "strokeColor": "#388e3c",
+      "label": {
+        "text": "Overlay Engine\n(colored IDs)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "wait",
+      "type": "rectangle",
+      "x": 480,
+      "y": 230,
+      "width": 150,
+      "height": 50,
+      "backgroundColor": "#e8f5e9",
+      "strokeColor": "#388e3c",
+      "label": {
+        "text": "Wait Utils\n(networkidle)"
+      },
+      "createdAt": "2026-04-16T18:50:15.049Z",
+      "updatedAt": "2026-04-16T18:50:15.049Z",
+      "version": 1
+    },
+    {
+      "id": "parser",
+      "type": "rectangle",
+      "x": 680,
+      "y": 230,
+      "width": 160,
+      "height": 50,
+      "backgroundColor": "#e8f5e9",
+      "strokeColor": "#388e3c",
+      "label": {
+        "text": "Page Parser\n(title, h1-h3, links)"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "agent",
+      "type": "rectangle",
+      "x": 120,
+      "y": 330,
+      "width": 160,
+      "height": 50,
+      "backgroundColor": "#fce4ec",
+      "strokeColor": "#c2185b",
+      "label": {
+        "text": "Agent Loop\n(observe ??' think ??' act)"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "server",
+      "type": "rectangle",
+      "x": 320,
+      "y": 330,
+      "width": 180,
+      "height": 50,
+      "backgroundColor": "#fce4ec",
+      "strokeColor": "#c2185b",
+      "label": {
+        "text": "FastAPI Server\n(/act /screenshot)"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "interactive",
+      "type": "rectangle",
+      "x": 540,
+      "y": 330,
+      "width": 180,
+      "height": 50,
+      "backgroundColor": "#fce4ec",
+      "strokeColor": "#c2185b",
+      "label": {
+        "text": "Interactive Step\n(storage_state.json)"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "openai",
+      "type": "rectangle",
+      "x": 50,
+      "y": 430,
+      "width": 160,
+      "height": 50,
+      "backgroundColor": "#f3e5f5",
+      "strokeColor": "#7b1fa2",
+      "label": {
+        "text": "OpenAI GPT-4o"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "ollama",
+      "type": "rectangle",
+      "x": 280,
+      "y": 430,
+      "width": 160,
+      "height": 50,
+      "backgroundColor": "#f3e5f5",
+      "strokeColor": "#7b1fa2",
+      "label": {
+        "text": "Ollama (local)\nllava / moondream"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "anthropic",
+      "type": "rectangle",
+      "x": 510,
+      "y": 430,
+      "width": 170,
+      "height": 50,
+      "backgroundColor": "#f3e5f5",
+      "strokeColor": "#7b1fa2",
+      "label": {
+        "text": "Anthropic Claude"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "shots",
+      "type": "rectangle",
+      "x": 50,
+      "y": 530,
+      "width": 150,
+      "height": 50,
+      "backgroundColor": "#e0f7fa",
+      "strokeColor": "#0097a7",
+      "label": {
+        "text": "Screenshots\nstep_N.jpg"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "state",
+      "type": "rectangle",
+      "x": 280,
+      "y": 530,
+      "width": 170,
+      "height": 50,
+      "backgroundColor": "#e0f7fa",
+      "strokeColor": "#0097a7",
+      "label": {
+        "text": "agent_state.json\n(resume)"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "report",
+      "type": "rectangle",
+      "x": 510,
+      "y": 530,
+      "width": 160,
+      "height": 50,
+      "backgroundColor": "#e0f7fa",
+      "strokeColor": "#0097a7",
+      "label": {
+        "text": "HTML Report\nreport.html"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1
+    },
+    {
+      "id": "mo1u3qfe9f7wzhjyxg4",
+      "type": "arrow",
+      "x": 196.56974584726908,
+      "y": 82.72352866883881,
+      "strokeColor": "#555",
+      "start": {
+        "id": "cli-main"
+      },
+      "end": {
+        "id": "browser"
+      },
+      "createdAt": "2026-04-16T18:50:15.050Z",
+      "updatedAt": "2026-04-16T18:50:15.050Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          123.050984495938,
+          44.55294266232238
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qff0e0ytpuzvahv",
+      "type": "arrow",
+      "x": 382.37177214454545,
+      "y": 87.47590187943175,
+      "strokeColor": "#555",
+      "start": {
+        "id": "cli-step"
+      },
+      "end": {
+        "id": "browser"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          13.351693806147182,
+          35.04819624113651
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffxgguc7ub5v",
+      "type": "arrow",
+      "x": 551.5276597720512,
+      "y": 83.79279858428013,
+      "strokeColor": "#555",
+      "start": {
+        "id": "web-tui"
+      },
+      "end": {
+        "id": "browser"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -78.76960525838803,
+          42.41440283143973
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffxtd4a3osai",
+      "type": "arrow",
+      "x": 310.8185804091622,
+      "y": 192.4904650383779,
+      "strokeColor": "#555",
+      "start": {
+        "id": "browser"
+      },
+      "end": {
+        "id": "tracker"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -106.9003187130613,
+          35.01906992324422
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffaqlxkxqjmon",
+      "type": "arrow",
+      "x": 384.95621288579036,
+      "y": 196.60245808999866,
+      "strokeColor": "#555",
+      "start": {
+        "id": "browser"
+      },
+      "end": {
+        "id": "overlay"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -18.33347840315969,
+          26.795083820002674
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffi5c4g5h33r",
+      "type": "arrow",
+      "x": 462.48116272084854,
+      "y": 194.38421005848699,
+      "strokeColor": "#555",
+      "start": {
+        "id": "browser"
+      },
+      "end": {
+        "id": "wait"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          47.66925350567135,
+          31.23157988302603
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffvxfslq3epx",
+      "type": "arrow",
+      "x": 527.7206501967243,
+      "y": 191.95274791053944,
+      "strokeColor": "#555",
+      "start": {
+        "id": "browser"
+      },
+      "end": {
+        "id": "parser"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          144.5586996065515,
+          39.23736132177825
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qff1x2f8tddl1o",
+      "type": "arrow",
+      "x": 218,
+      "y": 255,
+      "strokeColor": "#555",
+      "start": {
+        "id": "tracker"
+      },
+      "end": {
+        "id": "overlay"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          34,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qff3k6fct96vn6",
+      "type": "arrow",
+      "x": 302.1642977126775,
+      "y": 284.54186364642925,
+      "strokeColor": "#555",
+      "start": {
+        "id": "overlay"
+      },
+      "end": {
+        "id": "agent"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -59.328595425355076,
+          40.9162727071415
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffqrfu0qvjolm",
+      "type": "arrow",
+      "x": 365.60990680476334,
+      "y": 286.7075489304051,
+      "strokeColor": "#555",
+      "start": {
+        "id": "overlay"
+      },
+      "end": {
+        "id": "server"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          23.780186390473318,
+          36.58490213918981
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffdkm6zashhvb",
+      "type": "arrow",
+      "x": 423.79879985706305,
+      "y": 282.6487017042326,
+      "strokeColor": "#555",
+      "start": {
+        "id": "overlay"
+      },
+      "end": {
+        "id": "interactive"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          127.40240028587391,
+          44.70259659153476
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffb8tonnjbigr",
+      "type": "arrow",
+      "x": 672.1245793959322,
+      "y": 270.6920393935835,
+      "strokeColor": "#555",
+      "start": {
+        "id": "parser"
+      },
+      "end": {
+        "id": "agent"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -384.2491587918643,
+          68.61592121283297
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qffc9mz1rjbknd",
+      "type": "arrow",
+      "x": 177.91230124509337,
+      "y": 386.5538553641523,
+      "strokeColor": "#555",
+      "start": {
+        "id": "agent"
+      },
+      "end": {
+        "id": "openai"
+      },
+      "createdAt": "2026-04-16T18:50:15.051Z",
+      "updatedAt": "2026-04-16T18:50:15.051Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -25.82460249018675,
+          36.892289271695404
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfg9fivrims5sn",
+      "type": "arrow",
+      "x": 246.7839864320407,
+      "y": 384.23999152002546,
+      "strokeColor": "#555",
+      "start": {
+        "id": "agent"
+      },
+      "end": {
+        "id": "ollama"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          66.43202713591859,
+          41.52001695994909
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfgs4xqesiwcne",
+      "type": "arrow",
+      "x": 287.75533099626426,
+      "y": 377.21653949272513,
+      "strokeColor": "#555",
+      "start": {
+        "id": "agent"
+      },
+      "end": {
+        "id": "anthropic"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          214.48933800747147,
+          54.30109822973958
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfgyc3zcv443ag",
+      "type": "arrow",
+      "x": 152.08769875490663,
+      "y": 423.4461446358477,
+      "strokeColor": "#999",
+      "strokeStyle": "dashed",
+      "start": {
+        "id": "openai"
+      },
+      "end": {
+        "id": "agent"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          25.82460249018675,
+          -36.892289271695404
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfgmnrxyrwuvd",
+      "type": "arrow",
+      "x": 313.2160135679593,
+      "y": 425.76000847997454,
+      "strokeColor": "#999",
+      "strokeStyle": "dashed",
+      "start": {
+        "id": "ollama"
+      },
+      "end": {
+        "id": "agent"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -66.43202713591859,
+          -41.52001695994909
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfgvyk5qy7v5cr",
+      "type": "arrow",
+      "x": 502.24466900373574,
+      "y": 431.5176377224647,
+      "strokeColor": "#999",
+      "strokeStyle": "dashed",
+      "start": {
+        "id": "anthropic"
+      },
+      "end": {
+        "id": "agent"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -214.48933800747147,
+          -54.30109822973958
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfgf92x1k79et",
+      "type": "arrow",
+      "x": 187.81601246729286,
+      "y": 387.49063342055234,
+      "strokeColor": "#555",
+      "start": {
+        "id": "agent"
+      },
+      "end": {
+        "id": "shots"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -50.63202493458573,
+          135.01873315889526
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfg5w213kkbshx",
+      "type": "arrow",
+      "x": 225.71606363836452,
+      "y": 386.1709862283206,
+      "strokeColor": "#555",
+      "start": {
+        "id": "agent"
+      },
+      "end": {
+        "id": "state"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          113.56787272327097,
+          137.65802754335874
+        ]
+      ]
+    },
+    {
+      "id": "mo1u3qfg7n3vtn6pa09",
+      "type": "arrow",
+      "x": 255.8685397025019,
+      "y": 383.6505331807702,
+      "strokeColor": "#555",
+      "start": {
+        "id": "agent"
+      },
+      "end": {
+        "id": "report"
+      },
+      "createdAt": "2026-04-16T18:50:15.052Z",
+      "updatedAt": "2026-04-16T18:50:15.052Z",
+      "version": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          278.26292059499616,
+          142.69893363845955
+        ]
+      ]
+    }
+  ]
+}
