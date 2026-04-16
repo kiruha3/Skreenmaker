@@ -1,5 +1,5 @@
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AgentAction(BaseModel):
@@ -53,6 +53,17 @@ class AgentAction(BaseModel):
         default=None,
         description="Путь к файлу для upload_file",
     )
+
+    @field_validator("file_path", "filename")
+    @classmethod
+    def _validate_path(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if ".." in v:
+            raise ValueError('Path cannot contain ".."')
+        if v.startswith("/") or v.startswith("\\") or (len(v) >= 2 and v[1] == ":"):
+            raise ValueError("Absolute paths are not allowed")
+        return v
 
     tab_index: Optional[int] = Field(
         default=None,

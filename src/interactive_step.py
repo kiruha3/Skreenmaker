@@ -28,14 +28,8 @@ async def run_step(url: str, history: list, output_dir: str):
     await browser.launch(headless=True)
     try:
         # Восстанавливаем storage state если есть
-        if os.path.exists(storage_path) and browser._context:
-            # Пересоздаем context с storage state
-            await browser._context.close()
-            browser._context = await browser._browser.new_context(
-                viewport={"width": browser.viewport_width, "height": browser.viewport_height},
-                storage_state=storage_path,
-            )
-            browser._page = await browser._context.new_page()
+        if os.path.exists(storage_path):
+            await browser.load_storage_state(storage_path)
 
         await browser.navigate(url)
 
@@ -74,8 +68,7 @@ async def run_step(url: str, history: list, output_dir: str):
             json.dump(current_state, f, ensure_ascii=False, indent=2)
 
         # Сохраняем storage state для следующего шага
-        if browser._context:
-            await browser._context.storage_state(path=storage_path)
+        await browser.save_storage_state(storage_path)
 
         print(f"\n=== STEP {step_num} COMPLETE ===")
         print(f"Annotated screenshot: {annotated_path}")
@@ -111,7 +104,7 @@ async def _execute_action(browser: BrowserController, action: AgentAction):
         _, fresh_map = await browser.get_interactive_elements()
         target = fresh_map.get(action.element_display_id)
         if target:
-            await browser._page.mouse.click(target.cx, target.cy, button="right")
+            await browser.mouse_click(target.cx, target.cy, button="right")
         return
 
     if action.action_type == "hover" and action.element_display_id is not None:
@@ -126,7 +119,7 @@ async def _execute_action(browser: BrowserController, action: AgentAction):
         target = fresh_map.get(action.element_display_id)
         if target:
             await browser.click_by_coords(target.cx, target.cy)
-            await browser._page.keyboard.type(action.text)
+            await browser.keyboard_type(action.text)
         return
 
     if action.action_type == "press_key" and action.key:
@@ -153,10 +146,10 @@ async def _execute_action(browser: BrowserController, action: AgentAction):
         return
 
     if action.action_type == "switch_tab" and action.tab_index is not None:
-        pages = browser._context.pages
-        if 0 <= action.tab_index < len(pages):
-            browser._page = pages[action.tab_index]
-            await browser._page.bring_to_front()
+        try:
+            await browser.bring_to_front_tab(action.tab_index)
+        except (IndexError, RuntimeError):
+            pass
         return
 
     if action.action_type == "screenshot" and action.filename:

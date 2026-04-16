@@ -1,5 +1,7 @@
+import asyncio
 import base64
-import io
+import os
+import tempfile
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -13,6 +15,7 @@ app = FastAPI(title="SkreenMaker Browser Server")
 
 # Глобальная сессия браузера
 _session: Optional["BrowserSession"] = None
+_session_lock = asyncio.Lock()
 
 
 class BrowserSession:
@@ -32,10 +35,8 @@ class BrowserSession:
     async def act(self, action: Dict[str, Any]):
         await self.launch()
         from src.actions import AgentAction
-        from src.element_tracker import TrackedElement
 
         act = AgentAction(**action)
-        page = self.controller._page
 
         if act.action_type == "navigate" and act.url:
             await self.controller.navigate(act.url)
@@ -52,7 +53,7 @@ class BrowserSession:
                 return {"status": "ok", "observation": f"Clicked element {act.element_display_id}"}
 
             if act.action_type == "right_click":
-                await page.mouse.click(target.cx, target.cy, button="right")
+                await self.controller.mouse_click(target.cx, target.cy, button="right")
                 return {"status": "ok", "observation": f"Right-clicked element {act.element_display_id}"}
 
             if act.action_type == "hover":
@@ -61,7 +62,7 @@ class BrowserSession:
 
             if act.action_type == "type" and act.text:
                 await self.controller.click_by_coords(target.cx, target.cy)
-                await page.keyboard.type(act.text)
+                await self.controller.keyboard_type(act.text)
                 return {"status": "ok", "observation": f"Typed into element {act.element_display_id}"}
 
             if act.action_type == "select_option":
@@ -73,6 +74,8 @@ class BrowserSession:
 
             if act.action_type == "upload_file":
                 if target.selector and act.file_path:
+                    if not os.path.exists(act.file_path):
+                        return {"status": "error", "observation": f"File not found: {act.file_path}"}
                     await self.controller.upload_file(target.selector, act.file_path)
                     return {"status": "ok", "observation": f"Uploaded {act.file_path}"}
                 return {"status": "error", "observation": "Missing selector or file_path"}
@@ -89,40 +92,63 @@ class BrowserSession:
             return {"status": "ok", "observation": "Screenshot captured"}
 
         if act.action_type == "wait":
-            import asyncio
             await asyncio.sleep(act.seconds or 1)
             return {"status": "ok", "observation": f"Waited {act.seconds}s"}
 
         if act.action_type == "switch_tab":
             idx = act.tab_index or 0
-            pages = self.controller._context.pages
-            if 0 <= idx < len(pages):
-                self.controller._page = pages[idx]
-                await pages[idx].bring_to_front()
+            try:
+                await self.controller.bring_to_front_tab(idx)
                 return {"status": "ok", "observation": f"Switched to tab {idx}"}
-            return {"status": "error", "observation": "Tab index out of range"}
+            except (IndexError, RuntimeError):
+                return {"status": "error", "observation": "Tab index out of range"}
+
+        if act.action_type == "dismiss_alert":
+            await self.controller.set_dialog_action("dismiss")
+            return {"status": "ok", "observation": "Alert will be dismissed"}
+
+        if act.action_type == "accept_alert":
+            await self.controller.set_dialog_action("accept")
+            return {"status": "ok", "observation": "Alert will be accepted"}
 
         return {"status": "error", "observation": f"Unsupported action {act.action_type}"}
 
     async def screenshot_base64(self) -> str:
         await self.launch()
-        buf = io.BytesIO()
-        await self.controller.screenshot(path="__temp__.jpg")
-        with open("__temp__.jpg", "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode("utf-8")
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            await self.controller.screenshot(path=tmp_path)
+            with open(tmp_path, "rb") as f:
+                data = f.read()
+            return base64.b64encode(data).decode("utf-8")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
     async def screenshot_annotated_base64(self) -> Dict[str, Any]:
         await self.launch()
-        await self.controller.screenshot(path="__temp_raw__.jpg")
-        elements, elements_map = await self.controller.get_interactive_elements()
-        draw_overlay("__temp_raw__.jpg", elements, "__temp_annotated__.jpg")
-        with open("__temp_annotated__.jpg", "rb") as f:
-            data = f.read()
-        b64 = base64.b64encode(data).decode("utf-8")
-        # Приводим elements_map к сериализуемому виду
-        serializable_map = {str(k): v for k, v in elements_map.items()}
-        return {"image": b64, "elements": serializable_map}
+        with tempfile.NamedTemporaryFile(suffix="_raw.jpg", delete=False) as tmp_raw:
+            raw_path = tmp_raw.name
+        with tempfile.NamedTemporaryFile(suffix="_annotated.jpg", delete=False) as tmp_ann:
+            ann_path = tmp_ann.name
+        try:
+            await self.controller.screenshot(path=raw_path)
+            elements, elements_map = await self.controller.get_interactive_elements()
+            draw_overlay(raw_path, elements, ann_path)
+            with open(ann_path, "rb") as f:
+                data = f.read()
+            b64 = base64.b64encode(data).decode("utf-8")
+            serializable_map = {str(k): v for k, v in elements_map.items()}
+            return {"image": b64, "elements": serializable_map}
+        finally:
+            for p in (raw_path, ann_path):
+                try:
+                    os.unlink(p)
+                except Exception:
+                    pass
 
     async def get_elements(self) -> Dict[str, Any]:
         await self.launch()
@@ -162,22 +188,25 @@ class ActRequest(BaseModel):
 @app.post("/launch")
 async def launch(req: LaunchRequest):
     global _session
-    _session = BrowserSession(req.viewport_width, req.viewport_height)
-    await _session.launch(headless=req.headless)
+    async with _session_lock:
+        _session = BrowserSession(req.viewport_width, req.viewport_height)
+        await _session.launch(headless=req.headless)
     return {"status": "ok"}
 
 
 @app.post("/navigate")
 async def navigate(req: NavigateRequest):
     sess = get_session()
-    await sess.navigate(req.url)
+    async with _session_lock:
+        await sess.navigate(req.url)
     return {"status": "ok", "url": req.url}
 
 
 @app.post("/act")
 async def act(req: ActRequest):
     sess = get_session()
-    result = await sess.act(req.action)
+    async with _session_lock:
+        result = await sess.act(req.action)
     return result
 
 
@@ -204,5 +233,12 @@ async def elements():
 @app.post("/close")
 async def close():
     sess = get_session()
-    await sess.close()
+    async with _session_lock:
+        await sess.close()
     return {"status": "ok"}
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    sess = get_session()
+    await sess.close()

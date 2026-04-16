@@ -39,7 +39,7 @@ def compute_element_hash(tag: str, x: float, y: float, width: float, height: flo
     qh = _quantize(height)
     safe_text = text.strip()[:30]
     raw = f"{tag}|{qx}|{qy}|{qw}|{qh}|{safe_text}"
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:8]
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
 
 
 def _iou(a: Dict[str, float], b: Dict[str, float]) -> float:

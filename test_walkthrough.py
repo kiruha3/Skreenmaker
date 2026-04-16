@@ -18,9 +18,9 @@ async def main():
         await asyncio.sleep(1)
 
         elements = await browser.get_interactive_elements()
-        email_el = next((e for e in elements if "пользовател" in (e.text or "").lower() or e.element_id == 4), None)
-        pass_el = next((e for e in elements if "парол" in (e.text or "").lower() or e.element_id == 5), None)
-        login_btn = next((e for e in elements if "ойти" in (e.text or "").lower() or e.element_id == 7), None)
+        email_el = next((e for e in elements if "пользовател" in (e.text or "").lower() or e.display_id == 4), None)
+        pass_el = next((e for e in elements if "парол" in (e.text or "").lower() or e.display_id == 5), None)
+        login_btn = next((e for e in elements if "ойти" in (e.text or "").lower() or e.display_id == 7), None)
 
         if email_el and pass_el and login_btn:
             await browser.click_by_coords(email_el.x + email_el.width / 2, email_el.y + email_el.height / 2)
@@ -43,7 +43,7 @@ async def main():
 
         for el in dashboard_elements:
             safe_text = "".join(c if c.isalnum() or c in "_-" else "_" for c in el.text[:30])
-            label = f"{el.element_id}_{el.tag}_{safe_text}"
+            label = f"{el.display_id}_{el.tag}_{safe_text}"
             path = os.path.join(OUTPUT_DIR, f"before_click_{label}.jpg")
             annotated_path = os.path.join(OUTPUT_DIR, f"annotated_before_click_{label}.jpg")
 
@@ -52,7 +52,7 @@ async def main():
             _, _ = draw_overlay(path, dashboard_elements, annotated_path)
 
             # Кликаем
-            print(f"Clicking element {el.element_id}: [{el.tag}] '{el.text}'")
+            print(f"Clicking element {el.display_id}: [{el.tag}] '{el.text}'")
             await browser.click_by_coords(el.x + el.width / 2, el.y + el.height / 2)
             await asyncio.sleep(1.5)
 

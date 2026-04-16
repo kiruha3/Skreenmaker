@@ -1,6 +1,9 @@
+import logging
 from typing import Dict, List, Any
 
 from playwright.async_api import Page
+
+logger = logging.getLogger(__name__)
 
 
 async def extract_page_context(page: Page, max_body_chars: int = 2000) -> Dict[str, Any]:
@@ -11,7 +14,8 @@ async def extract_page_context(page: Page, max_body_chars: int = 2000) -> Dict[s
     body_text = ""
     try:
         body_text = await page.inner_text("body")
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to extract body text: %s", e)
         pass
     body_text = body_text[:max_body_chars].strip()
 
@@ -23,7 +27,8 @@ async def extract_page_context(page: Page, max_body_chars: int = 2000) -> Dict[s
                 text = await el.inner_text()
                 if text and text.strip():
                     headings.append(f"{level}: {text.strip()}")
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to extract headings: %s", e)
         pass
 
     links: List[str] = []
@@ -34,7 +39,8 @@ async def extract_page_context(page: Page, max_body_chars: int = 2000) -> Dict[s
             href = await el.get_attribute("href") or ""
             if text and text.strip():
                 links.append(f"{text.strip()} -> {href}")
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to extract links: %s", e)
         pass
     # Ограничиваем список ссылок
     links = links[:30]

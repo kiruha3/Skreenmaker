@@ -10,17 +10,17 @@ SYSTEM_PROMPT = """Ты — автономный агент, управляющ�
 Твоя задача — последовательно выполнить поставленную цель, выбирая одно действие за шаг.
 
 Доступные действия (ответь строго в JSON):
-- {"action_type": "navigate", "url": "...", "reasoning": "..."}
-- {"action_type": "click", "element_display_id": 5, "reasoning": "..."}
-- {"action_type": "type", "element_display_id": 3, "text": "...", "reasoning": "..."}
-- {"action_type": "scroll", "direction": "down"|"up"|"left"|"right", "amount": 300, "reasoning": "..."}
-- {"action_type": "hover", "element_display_id": 2, "reasoning": "..."}
-- {"action_type": "press_key", "key": "Enter"|"Escape"|"Tab", "reasoning": "..."}
-- {"action_type": "select_option", "element_display_id": 4, "text": "...", "reasoning": "..."}
-- {"action_type": "screenshot", "filename": "step_1.png", "reasoning": "..."}
-- {"action_type": "wait", "seconds": 2, "reasoning": "..."}
-- {"action_type": "finish", "summary": "...", "reasoning": "..."}
-- {"action_type": "fail", "reason": "...", "reasoning": "..."}
+- {{"action_type": "navigate", "url": "...", "reasoning": "..."}}
+- {{"action_type": "click", "element_display_id": 5, "reasoning": "..."}}
+- {{"action_type": "type", "element_display_id": 3, "text": "...", "reasoning": "..."}}
+- {{"action_type": "scroll", "direction": "down"|"up"|"left"|"right", "amount": 300, "reasoning": "..."}}
+- {{"action_type": "hover", "element_display_id": 2, "reasoning": "..."}}
+- {{"action_type": "press_key", "key": "Enter"|"Escape"|"Tab", "reasoning": "..."}}
+- {{"action_type": "select_option", "element_display_id": 4, "text": "...", "reasoning": "..."}}
+- {{"action_type": "screenshot", "filename": "step_1.png", "reasoning": "..."}}
+- {{"action_type": "wait", "seconds": 2, "reasoning": "..."}}
+- {{"action_type": "finish", "summary": "...", "reasoning": "..."}}
+- {{"action_type": "fail", "reason": "...", "reasoning": "..."}}
 
 Правила:
 1. Используй только номера элементов из текущего скриншота. Не выдумывай номера.

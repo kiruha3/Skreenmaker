@@ -1,8 +1,22 @@
 import base64
 import json
 import os
+import time
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
+
+
+def _call_with_retry(func, *args, **kwargs):
+    delays = [1.0, 3.0, 9.0]
+    last_exc = None
+    for attempt, delay in enumerate(delays):
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            last_exc = exc
+            if attempt < len(delays) - 1:
+                time.sleep(delay)
+    raise last_exc
 
 from openai import OpenAI
 
@@ -58,7 +72,7 @@ class OpenAILLM(BaseVisionLLM):
         key = api_key or os.environ.get("OPENAI_API_KEY")
         if not key:
             raise ValueError("OpenAI API key is required.")
-        self.client = OpenAI(api_key=key, base_url=base_url)
+        self.client = OpenAI(api_key=key, base_url=base_url, timeout=60.0)
         self.model = model
 
     def predict(
@@ -91,7 +105,8 @@ class OpenAILLM(BaseVisionLLM):
                 }
             )
 
-        response = self.client.chat.completions.create(
+        response = _call_with_retry(
+            self.client.chat.completions.create,
             model=self.model,
             messages=messages,
             temperature=0.2,
@@ -104,7 +119,7 @@ class OpenAILLM(BaseVisionLLM):
 
 class OllamaLLM(BaseVisionLLM):
     def __init__(self, base_url: str = "http://localhost:11434/v1", model: str = "llava"):
-        self.client = OpenAI(base_url=base_url, api_key="ollama")
+        self.client = OpenAI(base_url=base_url, api_key="ollama", timeout=60.0)
         self.model = model
 
     def predict(
@@ -136,7 +151,8 @@ class OllamaLLM(BaseVisionLLM):
                 }
             )
 
-        response = self.client.chat.completions.create(
+        response = _call_with_retry(
+            self.client.chat.completions.create,
             model=self.model,
             messages=messages,
             temperature=0.2,
@@ -156,10 +172,10 @@ class AnthropicLLM(BaseVisionLLM):
         # иногда проще; здесь используем нативный SDK если доступен
         try:
             import anthropic
-            self.client = anthropic.Anthropic(api_key=key)
+            self.client = anthropic.Anthropic(api_key=key, timeout=60.0)
             self.native = True
         except ImportError:
-            self.client = OpenAI(api_key=key, base_url="https://api.anthropic.com/v1/")
+            self.client = OpenAI(api_key=key, base_url="https://api.anthropic.com/v1/", timeout=60.0)
             self.native = False
         self.model = model
 
@@ -197,7 +213,8 @@ class AnthropicLLM(BaseVisionLLM):
                 anthropic_messages.append({"role": role, "content": m["content"]})
             anthropic_messages.append({"role": "user", "content": content_blocks})
 
-            response = self.client.messages.create(
+            response = _call_with_retry(
+                self.client.messages.create,
                 model=self.model,
                 max_tokens=800,
                 temperature=0.2,
@@ -214,7 +231,8 @@ class AnthropicLLM(BaseVisionLLM):
                     "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
                 },
             ]
-            response = self.client.chat.completions.create(
+            response = _call_with_retry(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=messages,
                 temperature=0.2,

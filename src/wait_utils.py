@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from typing import Optional
 
-from playwright.async_api import Page
+from playwright.async_api import Page, TimeoutError
+
+logger = logging.getLogger(__name__)
 
 
 async def smart_wait(
@@ -16,7 +19,8 @@ async def smart_wait(
     if action_type == "navigate":
         try:
             await page.wait_for_load_state("networkidle", timeout=timeout)
-        except Exception:
+        except TimeoutError:
+            logger.debug("Timeout waiting for networkidle, falling back to domcontentloaded")
             await page.wait_for_load_state("domcontentloaded", timeout=timeout)
         return
 
@@ -24,7 +28,8 @@ async def smart_wait(
         if selector:
             try:
                 await page.wait_for_selector(selector, state="visible", timeout=2000)
-            except Exception:
+            except TimeoutError:
+                logger.debug("Timeout waiting for selector %s", selector)
                 pass
         # Даем небольшое время SPA на реакцию
         await page.wait_for_timeout(300)
