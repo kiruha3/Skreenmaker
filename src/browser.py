@@ -270,6 +270,66 @@ class BrowserController:
         await self._page.keyboard.type(text)
         await smart_wait(self._page, "type")
 
+    async def _find_element_by_fallback(self, selector: Optional[str], stable_hash: Optional[str]):
+        """Ищет элемент по stable_hash или selector среди текущих интерактивных элементов."""
+        if not stable_hash and not selector:
+            return None
+        elements, elements_map = await self.get_interactive_elements()
+        if stable_hash:
+            for el in elements:
+                if el.stable_hash == stable_hash:
+                    return el
+        if selector:
+            for el in elements:
+                if el.selector == selector:
+                    return el
+        return None
+
+    async def click_with_fallback(self, index: int, selector: Optional[str] = None, stable_hash: Optional[str] = None):
+        try:
+            await self.click_by_index(index)
+        except RuntimeError:
+            target = await self._find_element_by_fallback(selector, stable_hash)
+            if not target:
+                raise RuntimeError(f"Element with index {index} not found and no fallback match")
+            await self.click_by_coords(target.cx, target.cy)
+
+    async def type_with_fallback(self, index: int, text: str, selector: Optional[str] = None, stable_hash: Optional[str] = None):
+        try:
+            js = """
+            (idx) => {
+                const selectors = [
+                    "input", "textarea", "select",
+                    "[contenteditable='true']",
+                    "[role='searchbox']", "[role='textbox']",
+                ];
+                const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
+                const visible = [];
+                for (const el of nodes) {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    if (rect.width < 5 || rect.height < 5) continue;
+                    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+                    visible.push(el);
+                }
+                const el = visible[idx - 1];
+                if (!el) return false;
+                el.scrollIntoView({block: 'center', inline: 'center'});
+                el.focus();
+                return true;
+            }
+            """
+            result = await self._page.evaluate(js, index)
+            if not result:
+                raise RuntimeError(f"Input element with index {index} not found")
+        except RuntimeError:
+            target = await self._find_element_by_fallback(selector, stable_hash)
+            if not target:
+                raise RuntimeError(f"Input element with index {index} not found and no fallback match")
+            await self.click_by_coords(target.cx, target.cy)
+        await self._page.keyboard.type(text)
+        await smart_wait(self._page, "type")
+
     async def close(self):
         try:
             if self._browser and self._browser.is_connected():

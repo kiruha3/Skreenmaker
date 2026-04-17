@@ -43,36 +43,63 @@ class BrowserSession:
             return {"status": "ok", "observation": f"Navigated to {act.url}"}
 
         if act.action_type in ("click", "type", "hover", "right_click", "select_option", "upload_file"):
-            elements, elements_map = await self.controller.get_interactive_elements()
-            target = elements_map.get(act.element_display_id)
-            if not target:
-                return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
+            use_fallback = bool(act.selector or act.stable_hash)
 
             if act.action_type == "click":
-                await self.controller.click_by_coords(target.cx, target.cy)
+                if use_fallback:
+                    await self.controller.click_with_fallback(act.element_display_id or 0, act.selector, act.stable_hash)
+                else:
+                    elements, elements_map = await self.controller.get_interactive_elements()
+                    target = elements_map.get(act.element_display_id)
+                    if not target:
+                        return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
+                    await self.controller.click_by_coords(target.cx, target.cy)
                 return {"status": "ok", "observation": f"Clicked element {act.element_display_id}"}
 
             if act.action_type == "right_click":
+                elements, elements_map = await self.controller.get_interactive_elements()
+                target = elements_map.get(act.element_display_id)
+                if not target:
+                    return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
                 await self.controller.mouse_click(target.cx, target.cy, button="right")
                 return {"status": "ok", "observation": f"Right-clicked element {act.element_display_id}"}
 
             if act.action_type == "hover":
+                elements, elements_map = await self.controller.get_interactive_elements()
+                target = elements_map.get(act.element_display_id)
+                if not target:
+                    return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
                 await self.controller.hover(target.cx, target.cy)
                 return {"status": "ok", "observation": f"Hovered element {act.element_display_id}"}
 
             if act.action_type == "type" and act.text:
-                await self.controller.click_by_coords(target.cx, target.cy)
-                await self.controller.keyboard_type(act.text)
+                if use_fallback:
+                    await self.controller.type_with_fallback(act.element_display_id or 0, act.text, act.selector, act.stable_hash)
+                else:
+                    elements, elements_map = await self.controller.get_interactive_elements()
+                    target = elements_map.get(act.element_display_id)
+                    if not target:
+                        return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
+                    await self.controller.click_by_coords(target.cx, target.cy)
+                    await self.controller.keyboard_type(act.text)
                 return {"status": "ok", "observation": f"Typed into element {act.element_display_id}"}
 
             if act.action_type == "select_option":
                 val = act.option_value or act.text or ""
+                elements, elements_map = await self.controller.get_interactive_elements()
+                target = elements_map.get(act.element_display_id)
+                if not target:
+                    return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
                 if target.selector:
                     await self.controller.select_option(target.selector, val)
                     return {"status": "ok", "observation": f"Selected {val}"}
                 return {"status": "error", "observation": "No selector for select_option"}
 
             if act.action_type == "upload_file":
+                elements, elements_map = await self.controller.get_interactive_elements()
+                target = elements_map.get(act.element_display_id)
+                if not target:
+                    return {"status": "error", "observation": f"Element {act.element_display_id} not found"}
                 if target.selector and act.file_path:
                     if not os.path.exists(act.file_path):
                         return {"status": "error", "observation": f"File not found: {act.file_path}"}

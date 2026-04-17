@@ -34,6 +34,16 @@ class AgentAction(BaseModel):
         description="ID пронумерованного элемента для click/type/hover/right_click/upload_file/select_option",
     )
 
+    selector: Optional[str] = Field(
+        default=None,
+        description="CSS-like selector для fallback при изменении индекса",
+    )
+
+    stable_hash: Optional[str] = Field(
+        default=None,
+        description="Стабильный хеш элемента для fallback при изменении индекса",
+    )
+
     text: Optional[str] = Field(
         default=None,
         description="Текст для ввода в поле (type) или option_text (select_option)",

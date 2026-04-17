@@ -205,12 +205,24 @@ createApp({
             await maybeAutoRecord();
         };
 
+        const enrichAction = (action) => {
+            if (action.element_display_id != null) {
+                const info = elements.value[action.element_display_id];
+                if (info) {
+                    action.selector = info.selector || undefined;
+                    action.stable_hash = info.stable_hash || undefined;
+                }
+            }
+            return action;
+        };
+
         const sendAction = async (action) => {
             if (action.element_display_id !== undefined) lastElementDisplayId.value = action.element_display_id;
-            const result = await apiPost('/act', { action });
+            const enriched = enrichAction({ ...action });
+            const result = await apiPost('/act', { action: enriched });
             status.value = result.observation || result.status;
             await refreshScreenshot();
-            lastManualAction.value = action;
+            lastManualAction.value = enriched;
             await maybeAutoRecord();
         };
 

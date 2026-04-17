@@ -92,3 +92,37 @@ async def test_type_by_index(browser):
     await browser.type_by_index(1, "hello@example.com")
     value = await browser._page.input_value("#email")
     assert value == "hello@example.com"
+
+
+@pytest.mark.asyncio
+async def test_click_with_fallback_by_stable_hash(browser):
+    url = f"file:///{FIXTURES_DIR / 'login_form.html'}"
+    await browser.navigate(url)
+    elements, elements_map = await browser.get_interactive_elements()
+    email_el = next(e for e in elements if e.tag == "input" and "email" in e.selector)
+    # Передаём неверный индекс, но правильный stable_hash — должен сработать fallback
+    await browser.click_with_fallback(999, stable_hash=email_el.stable_hash)
+    active = await browser._page.evaluate("() => document.activeElement.id")
+    assert active == "email"
+
+
+@pytest.mark.asyncio
+async def test_click_with_fallback_by_selector(browser):
+    url = f"file:///{FIXTURES_DIR / 'login_form.html'}"
+    await browser.navigate(url)
+    elements, elements_map = await browser.get_interactive_elements()
+    email_el = next(e for e in elements if e.tag == "input" and "email" in e.selector)
+    await browser.click_with_fallback(999, selector=email_el.selector)
+    active = await browser._page.evaluate("() => document.activeElement.id")
+    assert active == "email"
+
+
+@pytest.mark.asyncio
+async def test_type_with_fallback_by_stable_hash(browser):
+    url = f"file:///{FIXTURES_DIR / 'login_form.html'}"
+    await browser.navigate(url)
+    elements, elements_map = await browser.get_interactive_elements()
+    email_el = next(e for e in elements if e.tag == "input" and "email" in e.selector)
+    await browser.type_with_fallback(999, "fallback@example.com", stable_hash=email_el.stable_hash)
+    value = await browser._page.input_value("#email")
+    assert value == "fallback@example.com"
