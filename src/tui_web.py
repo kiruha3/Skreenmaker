@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -17,6 +18,10 @@ from src.agent import BrowserAgent
 
 # Монтируем server routes под тем же приложением
 app = server_app
+
+# Static files
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Шаблоны
 templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
@@ -28,9 +33,38 @@ _active_agent: Optional[BrowserAgent] = None
 _scenarios: Dict[str, Dict[str, Any]] = {}
 _current_scenario_id: Optional[str] = None
 
+SCENARIOS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scenarios.json")
+
+
+def _load_scenarios():
+    global _scenarios, _current_scenario_id
+    if os.path.exists(SCENARIOS_FILE):
+        try:
+            with open(SCENARIOS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _scenarios = data.get("scenarios", {})
+            _current_scenario_id = data.get("current_scenario_id")
+        except Exception:
+            _scenarios = {}
+            _current_scenario_id = None
+    else:
+        _scenarios = {}
+        _current_scenario_id = None
+
+
+def _save_scenarios():
+    try:
+        with open(SCENARIOS_FILE, "w", encoding="utf-8") as f:
+            json.dump({"scenarios": _scenarios, "current_scenario_id": _current_scenario_id}, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 
 def _new_scenario_id() -> str:
     return str(uuid.uuid4())[:8]
+
+
+_load_scenarios()
 
 
 # ---------- Pydantic models ----------
@@ -94,6 +128,7 @@ async def scenario_create(req: ScenarioCreate):
     sid = _new_scenario_id()
     _scenarios[sid] = {"id": sid, "name": req.name, "steps": []}
     _current_scenario_id = sid
+    _save_scenarios()
     return {"status": "ok", "scenario": _scenarios[sid]}
 
 
@@ -103,6 +138,7 @@ async def scenario_rename(req: ScenarioRename):
     if not s:
         return {"status": "error", "message": "Scenario not found"}
     s["name"] = req.name
+    _save_scenarios()
     return {"status": "ok", "scenario": s}
 
 
@@ -112,6 +148,7 @@ async def scenario_delete(req: ScenarioSelect):
     _scenarios.pop(req.scenario_id, None)
     if _current_scenario_id == req.scenario_id:
         _current_scenario_id = next(iter(_scenarios.keys()), None)
+    _save_scenarios()
     return {"status": "ok", "current_scenario_id": _current_scenario_id}
 
 
@@ -138,6 +175,7 @@ async def scenario_select(req: ScenarioSelect):
     if req.scenario_id not in _scenarios:
         return {"status": "error", "message": "Scenario not found"}
     _current_scenario_id = req.scenario_id
+    _save_scenarios()
     return {"status": "ok", "scenario": _scenarios[req.scenario_id]}
 
 
@@ -148,7 +186,13 @@ async def scenario_step_add(req: StepAdd):
     s = _scenarios.get(req.scenario_id)
     if not s:
         return {"status": "error", "message": "Scenario not found"}
-    s["steps"].append(req.action)
+    from src.actions import AgentAction
+    try:
+        validated = AgentAction(**req.action).model_dump()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    s["steps"].append(validated)
+    _save_scenarios()
     return {"status": "ok", "scenario": s}
 
 
@@ -159,7 +203,13 @@ async def scenario_step_update(req: StepUpdate):
         return {"status": "error", "message": "Scenario not found"}
     if not (0 <= req.step_index < len(s["steps"])):
         return {"status": "error", "message": "Invalid step index"}
-    s["steps"][req.step_index] = req.action
+    from src.actions import AgentAction
+    try:
+        validated = AgentAction(**req.action).model_dump()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    s["steps"][req.step_index] = validated
+    _save_scenarios()
     return {"status": "ok", "scenario": s}
 
 
@@ -171,6 +221,7 @@ async def scenario_step_delete(req: StepIndex):
     if not (0 <= req.step_index < len(s["steps"])):
         return {"status": "error", "message": "Invalid step index"}
     s["steps"].pop(req.step_index)
+    _save_scenarios()
     return {"status": "ok", "scenario": s}
 
 
@@ -184,6 +235,7 @@ async def scenario_step_move(req: StepMove):
     if not (0 <= idx < len(s["steps"]) and 0 <= new_idx < len(s["steps"])):
         return {"status": "error", "message": "Cannot move step"}
     s["steps"][idx], s["steps"][new_idx] = s["steps"][new_idx], s["steps"][idx]
+    _save_scenarios()
     return {"status": "ok", "scenario": s}
 
 
@@ -195,6 +247,7 @@ async def scenario_step_duplicate(req: StepIndex):
     if not (0 <= req.step_index < len(s["steps"])):
         return {"status": "error", "message": "Invalid step index"}
     s["steps"].insert(req.step_index + 1, dict(s["steps"][req.step_index]))
+    _save_scenarios()
     return {"status": "ok", "scenario": s}
 
 
@@ -213,8 +266,16 @@ async def scenario_import(req: ImportRequest):
     global _current_scenario_id
     sid = _new_scenario_id()
     name = req.name or f"Imported {sid}"
-    _scenarios[sid] = {"id": sid, "name": name, "steps": list(req.steps)}
+    from src.actions import AgentAction
+    validated_steps = []
+    for step in (req.steps or []):
+        try:
+            validated_steps.append(AgentAction(**step).model_dump())
+        except Exception as e:
+            return {"status": "error", "message": f"Invalid step: {e}"}
+    _scenarios[sid] = {"id": sid, "name": name, "steps": validated_steps}
     _current_scenario_id = sid
+    _save_scenarios()
     return {"status": "ok", "scenario": _scenarios[sid]}
 
 
@@ -281,8 +342,11 @@ async def replay_websocket(websocket: WebSocket):
         sess = get_session()
         steps = s["steps"]
         success = True
+        delay = float(msg.get("delay", 0.5))
         for i, step in enumerate(steps):
             await websocket.send_json({"type": "step_start", "index": i, "total": len(steps), "action": step})
+            if delay > 0 and i > 0:
+                await asyncio.sleep(delay)
             try:
                 result = await sess.act(step)
             except Exception as e:
@@ -377,6 +441,11 @@ async def agent_websocket(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        if _active_agent and _active_agent.browser:
+            try:
+                await _active_agent.browser.close()
+            except Exception:
+                pass
         _active_agent = None
         try:
             await websocket.close()
