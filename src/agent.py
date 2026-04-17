@@ -1,6 +1,7 @@
+import base64
 import json
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 from rich.console import Console
 from rich.panel import Panel
@@ -9,7 +10,7 @@ from src.browser import BrowserController
 from src.overlay import draw_overlay
 from src.llm_client import create_llm, BaseVisionLLM
 from src.page_parser import extract_page_context, format_page_context
-from src.prompts import SYSTEM_PROMPT, build_elements_list
+from src.prompts import SYSTEM_PROMPT, TEXT_SYSTEM_PROMPT, build_elements_list
 from src.actions import AgentAction
 
 
@@ -29,6 +30,9 @@ class BrowserAgent:
         model: str = "gpt-4o",
         base_url: Optional[str] = None,
         resume: bool = False,
+        text_mode: bool = False,
+        on_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        screenshot_on_demand: bool = False,
     ):
         self.task = task
         self.start_url = start_url
@@ -44,6 +48,9 @@ class BrowserAgent:
         )
         self.history: List[Dict[str, Any]] = []
         self.resume = resume
+        self.text_mode = text_mode
+        self.on_event = on_event
+        self.screenshot_on_demand = screenshot_on_demand
         self._state_path = os.path.join(self.output_dir, "agent_state.json")
 
         os.makedirs(self.output_dir, exist_ok=True)
@@ -74,6 +81,13 @@ class BrowserAgent:
         except Exception as e:
             console.print(f"[red]Failed to save state: {e}[/red]")
 
+    def _emit(self, event_type: str, payload: Dict[str, Any]):
+        if self.on_event:
+            try:
+                self.on_event(event_type, payload)
+            except Exception:
+                pass
+
     async def run(self) -> Dict[str, Any]:
         await self.browser.launch(headless=self.headless)
         try:
@@ -83,6 +97,7 @@ class BrowserAgent:
 
             for step in range(starting_step, self.max_steps + 1):
                 console.rule(f"[bold cyan]Step {step}/{self.max_steps}")
+                self._emit("step_start", {"step": step, "max_steps": self.max_steps})
 
                 action, observation = await self._step(step)
 
@@ -101,6 +116,9 @@ class BrowserAgent:
             # Финальный скриншот
             final_shot = os.path.join(self.output_dir, "final.jpg")
             await self.browser.screenshot(final_shot)
+            if os.path.exists(final_shot):
+                with open(final_shot, "rb") as f:
+                    self._emit("screenshot", {"base64": base64.b64encode(f.read()).decode("utf-8")})
 
             last_action = self.history[-1]["action"] if self.history else {}
             result = {
@@ -109,69 +127,154 @@ class BrowserAgent:
                 "steps_taken": len(self.history),
                 "output_dir": self.output_dir,
             }
+            self._emit("finish", result)
             console.print(Panel(json.dumps(result, ensure_ascii=False, indent=2), title="Result", border_style="blue"))
             return result
 
+        except Exception as e:
+            self._emit("error", {"message": str(e)})
+            raise
         finally:
             await self.browser.close()
 
     async def _step(self, step: int, max_retries: int = 2) -> tuple[AgentAction, str]:
         """Один полный цикл observe → think → act с возможностью retry."""
         for attempt in range(max_retries + 1):
-            # 1. Скриншот
-            raw_screenshot = os.path.join(self.output_dir, f"step_{step}_raw.jpg")
-            await self.browser.screenshot(raw_screenshot)
+            if self.text_mode:
+                # 1. Текстовый snapshot + элементы
+                snapshot, elements_map = await self.browser.get_text_snapshot()
 
-            # 2. Интерактивные элементы
-            elements, elements_map = await self.browser.get_interactive_elements()
+                # 2. Скриншоты для отчета (параллельно с LLM-запросом не делаем, т.к. проще последовательно)
+                raw_screenshot = os.path.join(self.output_dir, f"step_{step}_raw.jpg")
+                annotated = os.path.join(self.output_dir, f"step_{step}_annotated.jpg")
+                if not self.screenshot_on_demand:
+                    await self.browser.screenshot(raw_screenshot)
+                    elements, _ = await self.browser.get_interactive_elements()
+                    draw_overlay(raw_screenshot, elements, annotated)
+                    if os.path.exists(annotated):
+                        with open(annotated, "rb") as f:
+                            self._emit("screenshot", {"base64": base64.b64encode(f.read()).decode("utf-8")})
+                else:
+                    self._emit("snapshot_text", {"url": self.browser._page.url, "title": await self.browser._page.title(), "elements_count": len(elements_map)})
 
-            # 3. Overlay
-            annotated = os.path.join(self.output_dir, f"step_{step}_annotated.jpg")
-            _, overlay_map = draw_overlay(raw_screenshot, elements, annotated)
+                # 3. Формируем text-mode промпт
+                system_prompt = TEXT_SYSTEM_PROMPT.format(page_snapshot=snapshot)
 
-            # 4. Текстовый контекст страницы
-            page_ctx = await extract_page_context(self.browser._page)
-            page_ctx_str = format_page_context(page_ctx)
+                # 4. Запрос к LLM (text-only)
+                try:
+                    action = self.llm.predict_text(
+                        system_prompt=system_prompt,
+                        user_task=self.task,
+                        history=await self._compact_history(),
+                        page_context="",
+                    )
+                except Exception as e:
+                    console.print(f"[red]LLM error: {e}[/red]")
+                    action = AgentAction(action_type="fail", reason=f"LLM error: {e}")
+            else:
+                # Vision-mode: скриншот + overlay + vision LLM
+                raw_screenshot = os.path.join(self.output_dir, f"step_{step}_raw.jpg")
+                await self.browser.screenshot(raw_screenshot)
 
-            # 5. Формируем промпт
-            elements_list = build_elements_list(overlay_map)
-            system_prompt = SYSTEM_PROMPT.format(elements_list=elements_list)
+                elements, elements_map = await self.browser.get_interactive_elements()
 
-            # 6. Запрос к LLM
-            try:
-                action = self.llm.predict(
-                    system_prompt=system_prompt,
-                    user_task=self.task,
-                    screenshot_path=annotated,
-                    history=await self._compact_history(),
-                    page_context=page_ctx_str,
-                )
-            except Exception as e:
-                console.print(f"[red]LLM error: {e}[/red]")
-                action = AgentAction(action_type="fail", reason=f"LLM error: {e}")
+                annotated = os.path.join(self.output_dir, f"step_{step}_annotated.jpg")
+                _, overlay_map = draw_overlay(raw_screenshot, elements, annotated)
+                if os.path.exists(annotated):
+                    with open(annotated, "rb") as f:
+                        self._emit("screenshot", {"base64": base64.b64encode(f.read()).decode("utf-8")})
 
+                page_ctx = await extract_page_context(self.browser._page)
+                page_ctx_str = format_page_context(page_ctx)
+
+                elements_list = build_elements_list(overlay_map)
+                system_prompt = SYSTEM_PROMPT.format(elements_list=elements_list)
+
+                try:
+                    action = self.llm.predict(
+                        system_prompt=system_prompt,
+                        user_task=self.task,
+                        screenshot_path=annotated,
+                        history=await self._compact_history(),
+                        page_context=page_ctx_str,
+                    )
+                except Exception as e:
+                    console.print(f"[red]LLM error: {e}[/red]")
+                    action = AgentAction(action_type="fail", reason=f"LLM error: {e}")
+
+            self._emit("llm_decision", {"action_type": action.action_type, "reasoning": action.reasoning})
             console.print(Panel(
                 f"[bold]{action.action_type.upper()}[/bold]\n{action.reasoning}",
                 title="Agent Decision",
                 border_style="green",
             ))
 
-            # 7. Circuit breaker — проверяем, не застрял ли агент
+            # Circuit breaker — проверяем, не застрял ли агент
             if self._is_stuck(action):
                 return AgentAction(action_type="fail", reason="Agent stuck in a loop for 3 consecutive steps"), "Circuit breaker triggered"
 
-            # 8. Выполняем действие
+            # Выполняем действие
             try:
                 observation = await self._execute_action(action, elements_map)
+                self._emit("action_result", {"observation": observation})
                 return action, observation
             except Exception as e:
-                console.print(f"[yellow]Action error (attempt {attempt + 1}/{max_retries + 1}): {e}[/yellow]")
-                if attempt < max_retries:
-                    await self.browser.wait_for_timeout(500)
+                if self.text_mode:
+                    console.print(f"[yellow]Text-mode action error, trying vision fallback: {e}[/yellow]")
+                    try:
+                        return await self._vision_step(step)
+                    except Exception as ve:
+                        console.print(f"[red]Vision fallback failed: {ve}[/red]")
+                        if attempt < max_retries:
+                            await self.browser.wait_for_timeout(500)
+                            continue
+                        return AgentAction(action_type="fail", reason=f"Action failed after {max_retries + 1} attempts: {e}"), f"Action failed: {e}"
                 else:
-                    return AgentAction(action_type="fail", reason=f"Action failed after {max_retries + 1} attempts: {e}"), f"Action failed: {e}"
+                    console.print(f"[yellow]Action error (attempt {attempt + 1}/{max_retries + 1}): {e}[/yellow]")
+                    if attempt < max_retries:
+                        await self.browser.wait_for_timeout(500)
+                    else:
+                        self._emit("error", {"message": f"Action failed after {max_retries + 1} attempts: {e}"})
+                        return AgentAction(action_type="fail", reason=f"Action failed after {max_retries + 1} attempts: {e}"), f"Action failed: {e}"
 
         return AgentAction(action_type="fail", reason="Unknown failure"), "Unknown failure"
+
+    async def _vision_step(self, step: int) -> tuple[AgentAction, str]:
+        """Fallback vision-шаг для text-mode при ошибке действия."""
+        raw_screenshot = os.path.join(self.output_dir, f"step_{step}_raw.jpg")
+        await self.browser.screenshot(raw_screenshot)
+        elements, elements_map = await self.browser.get_interactive_elements()
+        annotated = os.path.join(self.output_dir, f"step_{step}_annotated.jpg")
+        _, overlay_map = draw_overlay(raw_screenshot, elements, annotated)
+        if os.path.exists(annotated):
+            with open(annotated, "rb") as f:
+                self._emit("screenshot", {"base64": base64.b64encode(f.read()).decode("utf-8")})
+        page_ctx = await extract_page_context(self.browser._page)
+        page_ctx_str = format_page_context(page_ctx)
+        elements_list = build_elements_list(overlay_map)
+        system_prompt = SYSTEM_PROMPT.format(elements_list=elements_list)
+
+        action = self.llm.predict(
+            system_prompt=system_prompt,
+            user_task=self.task,
+            screenshot_path=annotated,
+            history=await self._compact_history(),
+            page_context=page_ctx_str,
+        )
+        self._emit("llm_decision", {"action_type": action.action_type, "reasoning": action.reasoning, "fallback": True})
+
+        console.print(Panel(
+            f"[bold]{action.action_type.upper()}[/bold]\n{action.reasoning}",
+            title="Agent Decision (vision fallback)",
+            border_style="yellow",
+        ))
+
+        if self._is_stuck(action):
+            return AgentAction(action_type="fail", reason="Agent stuck in a loop for 3 consecutive steps"), "Circuit breaker triggered"
+
+        observation = await self._execute_action(action, elements_map)
+        self._emit("action_result", {"observation": observation, "fallback": True})
+        return action, observation
 
     def _is_stuck(self, current_action: AgentAction) -> bool:
         """Circuit breaker: если последние 3 шага — одно и то же действие с ошибкой / без изменений."""
@@ -220,28 +323,13 @@ class BrowserAgent:
             "Focus on what was accomplished and any important state changes:\n\n"
             + "\n".join(lines)
         )
-        # Создаём минимальный dummy-скриншот, т.к. predict требует путь к изображению
-        import tempfile
-        from PIL import Image
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            dummy_path = tmp.name
-        try:
-            Image.new("RGB", (1, 1), color="white").save(dummy_path, "JPEG")
-            summary_action = self.llm.predict(
-                system_prompt="You are a helpful assistant. Respond with a concise plain-text summary only.",
-                user_task=prompt,
-                screenshot_path=dummy_path,
-                history=[],
-                page_context="",
-            )
-            return summary_action.reasoning or str(summary_action.model_dump())
-        except Exception:
-            raise
-        finally:
-            try:
-                os.unlink(dummy_path)
-            except Exception:
-                pass
+        summary_action = self.llm.predict_text(
+            system_prompt="You are a helpful assistant. Respond with a concise plain-text summary only.",
+            user_task=prompt,
+            history=[],
+            page_context="",
+        )
+        return summary_action.reasoning or str(summary_action.model_dump())
 
     async def _execute_action(self, action: AgentAction, elements_map: Dict[int, Any]) -> str:
         if action.action_type == "navigate":
@@ -253,28 +341,28 @@ class BrowserAgent:
         if action.action_type == "click":
             if action.element_display_id and action.element_display_id in elements_map:
                 info = elements_map[action.element_display_id]
-                await self.browser.click_by_coords(info["cx"], info["cy"])
-                return f"Clicked element {action.element_display_id} ({info['tag']}: {info['text']})"
+                await self.browser.click_by_coords(info.cx, info.cy)
+                return f"Clicked element {action.element_display_id} ({info.tag}: {info.text})"
             return f"Element {action.element_display_id} not found on current screen"
 
         if action.action_type == "right_click":
             if action.element_display_id and action.element_display_id in elements_map:
                 info = elements_map[action.element_display_id]
-                await self.browser.mouse_click(info["cx"], info["cy"], button="right")
+                await self.browser.mouse_click(info.cx, info.cy, button="right")
                 return f"Right-clicked element {action.element_display_id}"
             return f"Element {action.element_display_id} not found"
 
         if action.action_type == "hover":
             if action.element_display_id and action.element_display_id in elements_map:
                 info = elements_map[action.element_display_id]
-                await self.browser.hover(info["cx"], info["cy"])
+                await self.browser.hover(info.cx, info.cy)
                 return f"Hovered element {action.element_display_id}"
             return f"Element {action.element_display_id} not found"
 
         if action.action_type == "type":
             if action.element_display_id and action.element_display_id in elements_map:
                 info = elements_map[action.element_display_id]
-                await self.browser.click_by_coords(info["cx"], info["cy"])
+                await self.browser.click_by_coords(info.cx, info.cy)
                 if action.text:
                     await self.browser.keyboard_type(action.text)
                     return f"Typed '{action.text}' into element {action.element_display_id}"
@@ -295,7 +383,7 @@ class BrowserAgent:
         if action.action_type == "select_option":
             if action.element_display_id and action.element_display_id in elements_map:
                 info = elements_map[action.element_display_id]
-                selector = info.get("selector", "")
+                selector = info.selector or ""
                 if selector:
                     val = action.option_value or action.text or ""
                     await self.browser.select_option(selector, val)
@@ -306,7 +394,7 @@ class BrowserAgent:
         if action.action_type == "upload_file":
             if action.element_display_id and action.element_display_id in elements_map:
                 info = elements_map[action.element_display_id]
-                selector = info.get("selector", "")
+                selector = info.selector or ""
                 if selector and action.file_path:
                     await self.browser.upload_file(selector, action.file_path)
                     return f"Uploaded {action.file_path} to element {action.element_display_id}"

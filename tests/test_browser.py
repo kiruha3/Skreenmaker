@@ -61,3 +61,34 @@ async def test_screenshot(browser, tmp_path):
     await browser.screenshot(str(path))
     assert path.exists()
     assert path.stat().st_size > 0
+
+
+@pytest.mark.asyncio
+async def test_get_text_snapshot(browser):
+    url = f"file:///{FIXTURES_DIR / 'login_form.html'}"
+    await browser.navigate(url)
+    snapshot, elements_map = await browser.get_text_snapshot()
+    assert isinstance(snapshot, str)
+    assert "URL:" in snapshot
+    assert "Elements:" in snapshot
+    assert len(elements_map) > 0
+
+
+@pytest.mark.asyncio
+async def test_click_by_index(browser):
+    url = f"file:///{FIXTURES_DIR / 'login_form.html'}"
+    await browser.navigate(url)
+    # На login_form.html порядок элементов: input#email, input#password, button, a
+    await browser.click_by_index(1)
+    # После клика на поле email фокус должен быть на нем (проверим через активный элемент)
+    active = await browser._page.evaluate("() => document.activeElement.id")
+    assert active == "email"
+
+
+@pytest.mark.asyncio
+async def test_type_by_index(browser):
+    url = f"file:///{FIXTURES_DIR / 'login_form.html'}"
+    await browser.navigate(url)
+    await browser.type_by_index(1, "hello@example.com")
+    value = await browser._page.input_value("#email")
+    assert value == "hello@example.com"

@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--base-url", type=str, default=None, help="Base URL для API")
     parser.add_argument("--config", type=str, default=None, help="Путь к config.yaml")
     parser.add_argument("--resume", action="store_true", help="Возобновить прерванную сессию из agent_state.json")
+    parser.add_argument("--text-mode", action="store_true", help="Использовать text-mode вместо vision (скриншоты)")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -34,10 +35,12 @@ def main():
 
     if provider == "openai" and not api_key:
         api_key = os.environ.get("OPENAI_API_KEY")
+    if provider == "kimi" and not api_key:
+        api_key = os.environ.get("MOONSHOT_API_KEY")
     if provider == "anthropic" and not api_key:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
 
-    if provider in ("openai", "anthropic") and not api_key:
+    if provider in ("openai", "kimi", "anthropic") and not api_key:
         print(f"Ошибка: нужен API ключ для {provider}. Установите env var или передайте --api-key")
         sys.exit(1)
 
@@ -54,6 +57,7 @@ def main():
         model=model,
         base_url=base_url,
         resume=args.resume,
+        text_mode=args.text_mode,
     )
 
     result = asyncio.run(agent.run())

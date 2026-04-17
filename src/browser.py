@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 
 from src.element_tracker import TrackedElement, track_elements
+from src.page_parser import format_text_snapshot
 from src.wait_utils import smart_wait
 
 
@@ -29,6 +30,7 @@ class BrowserController:
         self._browser = await self._playwright.chromium.launch(headless=headless)
         self._context = await self._browser.new_context(
             viewport={"width": self.viewport_width, "height": self.viewport_height},
+            ignore_https_errors=True,
         )
         self._page = await self._context.new_page()
         self._page.on("dialog", self._on_dialog)
@@ -191,6 +193,82 @@ class BrowserController:
         """
         raw_elements = await self._page.evaluate(js_code, [self.viewport_width, self.viewport_height])
         return track_elements(raw_elements)
+
+    async def get_text_snapshot(self) -> Tuple[str, Dict[int, TrackedElement]]:
+        """Возвращает текстовый snapshot страницы и маппинг display_id -> element."""
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        elements, elements_map = await self.get_interactive_elements()
+        title = await self._page.title()
+        url = self._page.url
+        snapshot = format_text_snapshot(url, title, elements)
+        return snapshot, elements_map
+
+    async def click_by_index(self, index: int):
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        js = """
+        (idx) => {
+            const selectors = [
+                "a", "button", "input", "textarea", "select",
+                "label[for]", "[contenteditable='true']",
+                "[role='button']", "[role='link']", "[role='checkbox']",
+                "[role='radio']", "[role='tab']", "[role='menuitem']",
+                "[role='switch']", "[role='searchbox']", "[role='textbox']",
+            ];
+            const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
+            const visible = [];
+            for (const el of nodes) {
+                const rect = el.getBoundingClientRect();
+                const style = window.getComputedStyle(el);
+                if (rect.width < 5 || rect.height < 5) continue;
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+                visible.push(el);
+            }
+            const el = visible[idx - 1];
+            if (!el) return false;
+            el.scrollIntoView({block: 'center', inline: 'center'});
+            el.focus();
+            el.click();
+            return true;
+        }
+        """
+        result = await self._page.evaluate(js, index)
+        if not result:
+            raise RuntimeError(f"Element with index {index} not found or not clickable")
+        await smart_wait(self._page, "click")
+
+    async def type_by_index(self, index: int, text: str):
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        js = """
+        (idx) => {
+            const selectors = [
+                "input", "textarea", "select",
+                "[contenteditable='true']",
+                "[role='searchbox']", "[role='textbox']",
+            ];
+            const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
+            const visible = [];
+            for (const el of nodes) {
+                const rect = el.getBoundingClientRect();
+                const style = window.getComputedStyle(el);
+                if (rect.width < 5 || rect.height < 5) continue;
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+                visible.push(el);
+            }
+            const el = visible[idx - 1];
+            if (!el) return false;
+            el.scrollIntoView({block: 'center', inline: 'center'});
+            el.focus();
+            return true;
+        }
+        """
+        result = await self._page.evaluate(js, index)
+        if not result:
+            raise RuntimeError(f"Input element with index {index} not found")
+        await self._page.keyboard.type(text)
+        await smart_wait(self._page, "type")
 
     async def close(self):
         try:

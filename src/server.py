@@ -158,6 +158,14 @@ class BrowserSession:
             "map": {str(k): v for k, v in elements_map.items()},
         }
 
+    async def get_text_snapshot(self) -> Dict[str, Any]:
+        await self.launch()
+        snapshot, elements_map = await self.controller.get_text_snapshot()
+        return {
+            "snapshot": snapshot,
+            "map": {str(k): v for k, v in elements_map.items()},
+        }
+
     async def close(self):
         if self._launched:
             await self.controller.close()
@@ -224,10 +232,23 @@ async def screenshot_annotated():
     return result
 
 
+@app.post("/screenshot_step")
+async def screenshot_step():
+    sess = get_session()
+    result = await sess.screenshot_annotated_base64()
+    return result
+
+
 @app.get("/elements")
 async def elements():
     sess = get_session()
     return await sess.get_elements()
+
+
+@app.get("/text_snapshot")
+async def text_snapshot():
+    sess = get_session()
+    return await sess.get_text_snapshot()
 
 
 @app.post("/close")

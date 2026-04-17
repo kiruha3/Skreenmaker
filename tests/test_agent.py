@@ -19,6 +19,7 @@ def output_dir():
 def mock_llm():
     llm = MagicMock()
     llm.predict = MagicMock(return_value=AgentAction(action_type="finish", summary="Done"))
+    llm.predict_text = MagicMock(return_value=AgentAction(action_type="finish", summary="Done"))
     return llm
 
 
@@ -36,6 +37,7 @@ def mock_browser():
     browser.navigate = AsyncMock()
     browser.screenshot = AsyncMock()
     browser.get_interactive_elements = AsyncMock(return_value=([], {}))
+    browser.get_text_snapshot = AsyncMock(return_value=("URL: about:blank\nElements:\n  [1] button: OK", {1: {"cx": 10, "cy": 10, "tag": "button", "text": "OK"}}))
     browser.close = AsyncMock()
     return browser
 
@@ -61,6 +63,16 @@ async def test_agent_run_finish(output_dir, mock_llm, mock_browser, agent_patche
 
 
 @pytest.mark.asyncio
+async def test_agent_text_mode_finish(output_dir, mock_llm, mock_browser, agent_patches):
+    with agent_patches[0], agent_patches[1], agent_patches[2], agent_patches[3], agent_patches[4]:
+        agent = BrowserAgent(task="test", start_url="about:blank", output_dir=output_dir, max_steps=3, text_mode=True)
+        result = await agent.run()
+        assert result["success"] is True
+        assert result["steps_taken"] == 1
+        mock_llm.predict_text.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_agent_retry_then_finish(output_dir, mock_browser, agent_patches):
     llm = MagicMock()
     llm.predict = MagicMock(side_effect=[
@@ -74,10 +86,13 @@ async def test_agent_retry_then_finish(output_dir, mock_browser, agent_patches):
         patch("src.agent.extract_page_context", new_callable=AsyncMock, return_value={}),
         patch("src.agent.format_page_context", return_value=""),
     )
-    mock_browser.get_interactive_elements = AsyncMock(return_value=(
-        [MagicMock(display_id=1, cx=10, cy=10, tag="button", text="OK")],
-        {1: {"cx": 10, "cy": 10, "tag": "button", "text": "OK"}},
-    ))
+    el_mock = MagicMock()
+    el_mock.cx = 10
+    el_mock.cy = 10
+    el_mock.tag = "button"
+    el_mock.text = "OK"
+    el_mock.selector = "button.ok"
+    mock_browser.get_interactive_elements = AsyncMock(return_value=([el_mock], {1: el_mock}))
     mock_browser.click_by_coords = AsyncMock(side_effect=[Exception("boom"), None])
 
     with agent_patches[0], agent_patches[1], agent_patches[2], agent_patches[3], agent_patches[4]:
@@ -97,7 +112,13 @@ async def test_agent_circuit_breaker(output_dir, mock_browser, agent_patches):
         patch("src.agent.extract_page_context", new_callable=AsyncMock, return_value={}),
         patch("src.agent.format_page_context", return_value=""),
     )
-    mock_browser.get_interactive_elements = AsyncMock(return_value=([], {}))
+    el_mock = MagicMock()
+    el_mock.cx = 10
+    el_mock.cy = 10
+    el_mock.tag = "button"
+    el_mock.text = "OK"
+    el_mock.selector = "button.ok"
+    mock_browser.get_interactive_elements = AsyncMock(return_value=([el_mock], {1: el_mock}))
 
     with agent_patches[0], agent_patches[1], agent_patches[2], agent_patches[3], agent_patches[4]:
         agent = BrowserAgent(task="test", start_url="about:blank", output_dir=output_dir, max_steps=5)

@@ -15,7 +15,7 @@
         .toolbar button:hover { background: #0056b3; }
         .toolbar button.secondary { background: #6c757d; }
         .toolbar button.secondary:hover { background: #545b62; }
-        .main { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
+        .main { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
         @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
         .panel { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .screenshot-wrap { text-align: center; }
@@ -32,13 +32,45 @@
         .history-item { padding: 4px 0; border-bottom: 1px solid #eee; }
         .type-box { display: flex; gap: 6px; margin-top: 8px; }
         .type-box input { flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; margin-bottom: 8px; border-bottom: 1px solid #ddd; }
+        .tab { padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; }
+        .tab.active { border-bottom-color: #007bff; color: #007bff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Agent panel */
+        .agent-form label { display: block; font-size: 12px; margin: 8px 0 4px; color: #555; }
+        .agent-form textarea, .agent-form select, .agent-form input {
+            width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;
+        }
+        .agent-form textarea { resize: vertical; min-height: 60px; }
+        .agent-form .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+        .agent-form .row input, .agent-form .row select { flex: 1; }
+        .agent-form .checkbox { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; }
+        .agent-form .checkbox input { width: auto; }
+        .agent-form button { margin-top: 10px; width: 100%; }
+        .agent-form button.stop { background: #dc3545; }
+        .agent-form button.stop:hover { background: #c82333; }
+        .agent-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .reasoning-log { max-height: 320px; overflow-y: auto; font-size: 12px; margin-top: 10px; border-top: 1px solid #eee; padding-top: 8px; }
+        .step-card { border-left: 3px solid #007bff; background: #f8f9fa; padding: 8px 10px; margin-bottom: 8px; border-radius: 4px; }
+        .step-card.error { border-left-color: #dc3545; background: #fff5f5; }
+        .step-card.finish-success { border-left-color: #28a745; background: #f0fff4; }
+        .step-card.finish-fail { border-left-color: #dc3545; background: #fff5f5; }
+        .step-title { font-weight: 600; color: #333; }
+        .step-reason { color: #555; margin-top: 4px; }
+        .step-result { color: #28a745; margin-top: 4px; }
+        .step-error { color: #dc3545; margin-top: 4px; }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>SkreenMaker — Interactive Browser TUI</h1>
     <div class="toolbar">
-        <input type="text" id="urlInput" placeholder="https://example.com" value="https://example.com">
+        <input type="text" id="urlInput" placeholder="https://example.com" value="https://stagehelper.ai.slsoft.ru/">
         <button onclick="navigate()">Перейти</button>
         <button class="secondary" onclick="refreshScreenshot()">Обновить скрин</button>
         <button class="secondary" onclick="takeScreenshot()">Скриншот</button>
@@ -53,30 +85,66 @@
         </div>
 
         <div>
-            <div class="panel">
-                <div class="section-title">Элементы</div>
-                <div class="elements-grid" id="elementsGrid"></div>
-
-                <div class="section-title">Быстрые действия</div>
-                <div class="quick-btns">
-                    <button onclick="sendAction({'action_type':'press_key','key':'Enter'})">Enter</button>
-                    <button onclick="sendAction({'action_type':'press_key','key':'Escape'})">Escape</button>
-                    <button onclick="sendAction({'action_type':'press_key','key':'Tab'})">Tab</button>
-                    <button onclick="sendAction({'action_type':'scroll','direction':'down'})">↓ Вниз</button>
-                    <button onclick="sendAction({'action_type':'scroll','direction':'up'})">↑ Вверх</button>
-                </div>
-
-                <div class="section-title">Ввод текста</div>
-                <div class="type-box">
-                    <input type="text" id="typeInput" placeholder="Текст...">
-                    <button onclick="typeText()">Ввести</button>
-                </div>
-                <div style="font-size:12px;color:#666;margin-top:4px;">Сначала кликните по полю ввода, потом нажмите "Ввести"</div>
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('manual')" id="tab-manual">Manual</div>
+                <div class="tab" onclick="switchTab('agent')" id="tab-agent">Агент</div>
             </div>
 
-            <div class="panel" style="margin-top:12px;">
-                <div class="section-title">История</div>
-                <div class="history-list" id="historyList"></div>
+            <div id="content-manual" class="tab-content active">
+                <div class="panel">
+                    <div class="section-title">Элементы</div>
+                    <div class="elements-grid" id="elementsGrid"></div>
+
+                    <div class="section-title">Быстрые действия</div>
+                    <div class="quick-btns">
+                        <button onclick="sendAction({'action_type':'press_key','key':'Enter'})">Enter</button>
+                        <button onclick="sendAction({'action_type':'press_key','key':'Escape'})">Escape</button>
+                        <button onclick="sendAction({'action_type':'press_key','key':'Tab'})">Tab</button>
+                        <button onclick="sendAction({'action_type':'scroll','direction':'down'})">↓ Вниз</button>
+                        <button onclick="sendAction({'action_type':'scroll','direction':'up'})">↑ Вверх</button>
+                    </div>
+
+                    <div class="section-title">Ввод текста</div>
+                    <div class="type-box">
+                        <input type="text" id="typeInput" placeholder="Текст...">
+                        <button onclick="typeText()">Ввести</button>
+                    </div>
+                    <div style="font-size:12px;color:#666;margin-top:4px;">Сначала кликните по полю ввода в списке элементов, потом нажмите "Ввести"</div>
+                </div>
+
+                <div class="panel" style="margin-top:12px;">
+                    <div class="section-title">История</div>
+                    <div class="history-list" id="historyList"></div>
+                </div>
+            </div>
+
+            <div id="content-agent" class="tab-content">
+                <div class="panel agent-form">
+                    <label for="taskInput">Задача агента</label>
+                    <textarea id="taskInput" placeholder="Войти в систему и открыть Базу знаний...">Войти в систему используя email k.tretyakov@slsoft.ru и пароль v_vP5GxCva, затем открыть раздел База знаний</textarea>
+
+                    <div class="row">
+                        <select id="agentProvider">
+                            <option value="kimi-cli" selected>kimi-cli</option>
+                            <option value="openai">openai</option>
+                            <option value="anthropic">anthropic</option>
+                            <option value="ollama">ollama</option>
+                        </select>
+                        <input type="number" id="agentMaxSteps" value="15" min="1" max="100">
+                    </div>
+
+                    <div class="checkbox">
+                        <input type="checkbox" id="agentTextMode" checked>
+                        <label for="agentTextMode" style="margin:0;">Text-mode (быстрее, без скриншотов в цикле)</label>
+                    </div>
+
+                    <button id="btnStartAgent" onclick="startAgent()">▶ Запустить агента</button>
+                    <button id="btnStopAgent" class="stop" onclick="stopAgent()" style="display:none;">⏹ Стоп</button>
+                    <button class="secondary" onclick="takeStepScreenshot()" style="margin-top:8px;">📷 Скриншот шага</button>
+
+                    <div class="section-title">Лента reasoning</div>
+                    <div class="reasoning-log" id="reasoningLog"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -86,6 +154,29 @@
     let lastElementDisplayId = null;
     let history = [];
     let historyIndex = -1;
+    let ws = null;
+    let currentStepCard = null;
+    let autoRefreshInterval = null;
+
+    function setScreenshot(base64Url) {
+        const img = new Image();
+        img.onload = () => {
+            document.getElementById('screenshot').src = img.src;
+        };
+        img.src = base64Url;
+    }
+
+    function startAutoRefresh() {
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        autoRefreshInterval = setInterval(refreshScreenshot, 3000);
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
 
     async function apiPost(path, body) {
         const res = await fetch(path, {
@@ -129,7 +220,7 @@
 
     async function refreshScreenshot() {
         const res = await apiPost('/screenshot_annotated', {});
-        document.getElementById('screenshot').src = 'data:image/jpeg;base64,' + res.image;
+        setScreenshot('data:image/jpeg;base64,' + res.image);
         renderElements(res.elements);
         document.getElementById('status').textContent = 'Обновлено: ' + new Date().toLocaleTimeString();
     }
@@ -176,7 +267,6 @@
         if (historyIndex > 0) {
             historyIndex--;
             renderHistory();
-            // В реальности undo требует воспроизведения истории с нуля — упрощенно просто визуально
         }
     }
 
@@ -187,13 +277,140 @@
         }
     }
 
-    // Автообновление скриншота каждые 3 секунды
-    setInterval(refreshScreenshot, 3000);
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
+        document.getElementById('content-' + tab).classList.add('active');
+        if (tab === 'manual') {
+            startAutoRefresh();
+        } else {
+            stopAutoRefresh();
+        }
+    }
+
+    function startAgent() {
+        if (ws) ws.close();
+        document.getElementById('reasoningLog').innerHTML = '';
+        document.getElementById('btnStartAgent').style.display = 'none';
+        document.getElementById('btnStopAgent').style.display = 'block';
+
+        ws = new WebSocket('ws://' + location.host + '/ws/agent');
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                task: document.getElementById('taskInput').value,
+                url: document.getElementById('urlInput').value,
+                text_mode: document.getElementById('agentTextMode').checked,
+                provider: document.getElementById('agentProvider').value,
+                max_steps: parseInt(document.getElementById('agentMaxSteps').value),
+                headless: false,
+                screenshot_on_demand: true
+            }));
+        };
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            handleAgentEvent(data);
+        };
+        ws.onclose = () => {
+            document.getElementById('btnStartAgent').style.display = 'block';
+            document.getElementById('btnStopAgent').style.display = 'none';
+        };
+        ws.onerror = (e) => {
+            appendStepCard({ title: 'WebSocket error', error: 'Connection failed', cls: 'error' });
+        };
+    }
+
+    function stopAgent() {
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        document.getElementById('btnStartAgent').style.display = 'block';
+        document.getElementById('btnStopAgent').style.display = 'none';
+    }
+
+    async function takeStepScreenshot() {
+        const res = await apiPost('/agent_screenshot', {});
+        if (res.image) {
+            setScreenshot('data:image/jpeg;base64,' + res.image);
+            document.getElementById('status').textContent = 'Скриншот шага: ' + new Date().toLocaleTimeString();
+        } else {
+            document.getElementById('status').textContent = 'Не удалось получить скриншот: ' + (res.message || '');
+        }
+    }
+
+    function handleAgentEvent(data) {
+        switch(data.type) {
+            case 'screenshot':
+                setScreenshot('data:image/jpeg;base64,' + data.base64);
+                document.getElementById('status').textContent = 'Шаг ' + (data.step || '') + ' обновлён: ' + new Date().toLocaleTimeString();
+                break;
+            case 'snapshot_text':
+                document.getElementById('status').textContent = 'Step snapshot: ' + data.elements_count + ' elements @ ' + (data.url || '');
+                break;
+            case 'step_start':
+                currentStepCard = { step: data.step, max_steps: data.max_steps };
+                break;
+            case 'llm_decision':
+                if (currentStepCard) {
+                    currentStepCard.action_type = data.action_type;
+                    currentStepCard.reasoning = data.reasoning;
+                    currentStepCard.fallback = data.fallback;
+                } else {
+                    currentStepCard = { action_type: data.action_type, reasoning: data.reasoning, fallback: data.fallback };
+                }
+                break;
+            case 'action_result':
+                if (currentStepCard) {
+                    currentStepCard.observation = data.observation;
+                    currentStepCard.fallback = currentStepCard.fallback || data.fallback;
+                    flushStepCard();
+                    currentStepCard = null;
+                }
+                break;
+            case 'error':
+                appendStepCard({ title: 'Ошибка', error: data.message, cls: 'error' });
+                break;
+            case 'finish':
+                const cls = data.success ? 'finish-success' : 'finish-fail';
+                const title = data.success ? '✓ Завершено' : '✗ Неудача';
+                appendStepCard({ title: title, result: data.summary || '', cls: cls });
+                document.getElementById('btnStartAgent').style.display = 'block';
+                document.getElementById('btnStopAgent').style.display = 'none';
+                break;
+        }
+    }
+
+    function flushStepCard() {
+        if (!currentStepCard) return;
+        const step = currentStepCard.step || '';
+        const max = currentStepCard.max_steps || '';
+        const fallback = currentStepCard.fallback ? ' (vision fallback)' : '';
+        const title = step ? `Step ${step}/${max} — ${currentStepCard.action_type?.toUpperCase() || ''}${fallback}` : currentStepCard.action_type?.toUpperCase() || '';
+        appendStepCard({
+            title: title,
+            reason: currentStepCard.reasoning || '',
+            result: currentStepCard.observation || ''
+        });
+    }
+
+    function appendStepCard({ title, reason, result, error, cls }) {
+        const log = document.getElementById('reasoningLog');
+        const card = document.createElement('div');
+        card.className = 'step-card ' + (cls || '');
+        let html = `<div class="step-title">${escapeHtml(title)}</div>`;
+        if (reason) html += `<div class="step-reason">${escapeHtml(reason)}</div>`;
+        if (result) html += `<div class="step-result">${escapeHtml(result)}</div>`;
+        if (error) html += `<div class="step-error">${escapeHtml(error)}</div>`;
+        card.innerHTML = html;
+        log.appendChild(card);
+        log.scrollTop = log.scrollHeight;
+    }
 
     // Инициализация
     (async () => {
-        await apiPost('/launch', { headless: true });
         await refreshScreenshot();
+        startAutoRefresh();
     })();
 </script>
 </body>

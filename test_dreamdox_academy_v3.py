@@ -37,7 +37,9 @@ async def ss(browser, name, elements=None):
     ann = os.path.join(OUTPUT_DIR, f"{name}_annotated.jpg")
     await browser.screenshot(raw)
     if elements is not None:
-        draw_overlay(raw, elements, ann)
+        # get_interactive_elements returns (tracked_list, display_map)
+        tracked = elements[0] if isinstance(elements, tuple) else elements
+        draw_overlay(raw, tracked, ann)
     return raw, ann if elements is not None else raw
 
 
@@ -254,6 +256,8 @@ async def main():
         txt = await page.evaluate("() => document.body.innerText")
         if "404" in txt or "не найден" in txt.lower() or "not found" in txt.lower():
             add_bug("Курс Car Repair недоступен", "medium", "Переход на /courses/72 показывает ошибку или 404.", screenshot=raw, module="course")
+        elif "В этом курсе пока нет материалов" in txt and "Записаться на курс" in txt:
+            add_step("Car Repair: кнопка записи", status="warn", details="Пользователь не заэнроллен, отображается кнопка записи")
         elif "записаться" in txt.lower() or "enrol" in txt.lower():
             add_bug("Car Repair требует записи", "low", "Пользователь не заэнроллен в курс 72.", screenshot=raw, module="course")
         elif "В этом курсе пока нет материалов" in txt:

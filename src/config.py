@@ -13,7 +13,7 @@ class AppConfig(BaseSettings):
         extra="ignore",
     )
 
-    llm_provider: Literal["openai", "ollama", "anthropic"] = Field(default="openai")
+    llm_provider: Literal["openai", "kimi", "ollama", "anthropic"] = Field(default="openai")
     api_key: Optional[str] = Field(default=None)
     model: str = Field(default="gpt-4o")
     base_url: Optional[str] = Field(default=None)

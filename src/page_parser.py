@@ -1,7 +1,10 @@
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, TYPE_CHECKING
 
 from playwright.async_api import Page
+
+if TYPE_CHECKING:
+    from src.element_tracker import TrackedElement
 
 logger = logging.getLogger(__name__)
 
@@ -69,4 +72,38 @@ def format_page_context(ctx: Dict[str, Any]) -> str:
     body = ctx.get("body_preview", "")
     if body:
         lines.append(f"Body preview:\n{body}")
+    return "\n".join(lines)
+
+
+def format_text_snapshot(
+    url: str,
+    title: str,
+    elements: List["TrackedElement"],
+    max_elements: int = 100,
+    max_body_chars: int = 800,
+) -> str:
+    """
+    Форматирует страницу в компактное текстовое представление для text-mode агента.
+    Нумерация элементов совпадает с их display_id.
+    """
+    lines: List[str] = []
+    lines.append(f"URL: {url}")
+    lines.append(f"Title: {title}")
+    lines.append("")
+
+    if elements:
+        lines.append("Elements:")
+        for el in elements[:max_elements]:
+            tag = el.tag or "element"
+            text = (el.text or "").strip()
+            desc = f"[{el.display_id}] {tag}"
+            if text:
+                desc += f": {text}"
+            lines.append(f"  {desc}")
+        if len(elements) > max_elements:
+            lines.append(f"  ... and {len(elements) - max_elements} more elements")
+    else:
+        lines.append("Elements: (none)")
+
+    lines.append("")
     return "\n".join(lines)
