@@ -84,6 +84,17 @@
         .record-bar button.recording:hover { background: #c82333; }
         .empty-steps { color: #888; padding: 12px; text-align: center; }
 
+        .scenario-list { max-height: 120px; overflow-y: auto; border: 1px solid #eee; border-radius: 4px; padding: 6px; margin-bottom: 8px; }
+        .scenario-card { padding: 8px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; margin-bottom: 6px; font-size: 12px; }
+        .scenario-card:hover { background: #f8f9fa; }
+        .scenario-card.active { border-color: #007bff; background: #e9f3ff; }
+        .scenario-name { font-weight: 600; }
+        .scenario-meta { color: #666; font-size: 11px; margin-top: 2px; }
+
+        .step-row.active-step { background: #e9f3ff; border-left: 3px solid #007bff; }
+        .step-row.step-success { background: #f0fff4; border-left: 3px solid #28a745; }
+        .step-row.step-error { background: #fff5f5; border-left: 3px solid #dc3545; }
+
         /* Modal */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.35); align-items: center; justify-content: center; }
         .modal.active { display: flex; }
@@ -144,13 +155,16 @@
                 </div>
 
                 <div class="panel" style="margin-top:12px;">
-                    <div class="section-title">Сценарий</div>
+                    <div class="section-title">Сценарии</div>
+                    <div class="scenario-list" id="scenarioList">
+                        <div class="empty-steps">Нет сценариев</div>
+                    </div>
                     <div class="scenario-toolbar">
-                        <select id="scenarioSelect" onchange="onScenarioSelectChange()"></select>
                         <button onclick="createScenario()">+ New</button>
                         <button class="secondary" onclick="renameScenario()">Rename</button>
                         <button class="danger" onclick="deleteScenario()">Del</button>
                     </div>
+                    <div class="section-title" id="stepsTitle">Шаги</div>
                     <div class="step-list" id="stepList">
                         <div class="empty-steps">Нет шагов</div>
                     </div>
@@ -158,7 +172,8 @@
                         <button class="secondary" onclick="recordLastAction()" id="btnRecord" disabled>⏺ Record last</button>
                         <button class="secondary" onclick="toggleAutoRecord()" id="btnAutoRecord" disabled>⏺ Запись</button>
                         <button class="secondary" onclick="openAddStepModal()">+ Add step</button>
-                        <button onclick="replayScenario()">▶ Replay</button>
+                        <button onclick="startReplay()" id="btnReplay">▶ Replay</button>
+                        <button class="stop" onclick="stopReplay()" id="btnStopReplay" style="display:none;">⏹ Стоп</button>
                         <button class="secondary" onclick="exportScenario()">Export</button>
                         <button class="secondary" onclick="importScenario()">Import</button>
                     </div>
@@ -264,6 +279,7 @@
     let lastManualAction = null;
     let modalEditIndex = null;
     let autoRecordEnabled = false;
+    let replayWs = null;
 
     function setScreenshot(base64Url) {
         const img = new Image();
@@ -403,27 +419,24 @@
         if (data.status === 'ok') {
             scenarios = data.scenarios || [];
             currentScenarioId = data.current_scenario_id || null;
-            renderScenarioSelect();
+            renderScenarioList();
             renderStepList();
         }
     }
 
-    function renderScenarioSelect() {
-        const sel = document.getElementById('scenarioSelect');
-        sel.innerHTML = '';
+    function renderScenarioList() {
+        const container = document.getElementById('scenarioList');
         if (scenarios.length === 0) {
-            const opt = document.createElement('option');
-            opt.textContent = 'Нет сценариев';
-            opt.value = '';
-            sel.appendChild(opt);
+            container.innerHTML = '<div class="empty-steps">Нет сценариев</div>';
             return;
         }
+        container.innerHTML = '';
         for (const s of scenarios) {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.name;
-            if (s.id === currentScenarioId) opt.selected = true;
-            sel.appendChild(opt);
+            const card = document.createElement('div');
+            card.className = 'scenario-card' + (s.id === currentScenarioId ? ' active' : '');
+            card.innerHTML = `<div class="scenario-name">${escapeHtml(s.name)}</div><div class="scenario-meta">${s.steps.length} шагов</div>`;
+            card.onclick = () => selectScenario(s.id);
+            container.appendChild(card);
         }
     }
 
@@ -498,14 +511,15 @@
         }
     }
 
-    async function onScenarioSelectChange() {
-        const sel = document.getElementById('scenarioSelect');
-        const id = sel.value;
+    async function selectScenario(id) {
         if (!id) return;
         await apiPost('/scenario/select', { scenario_id: id });
         currentScenarioId = id;
+        renderScenarioList();
         renderStepList();
         updateRecordButton();
+        const sc = getCurrentScenario();
+        document.getElementById('stepsTitle').textContent = sc ? 'Шаги: ' + escapeHtml(sc.name) : 'Шаги';
     }
 
     async function createScenario() {
@@ -515,9 +529,10 @@
         if (data.status === 'ok') {
             scenarios.push(data.scenario);
             currentScenarioId = data.scenario.id;
-            renderScenarioSelect();
+            renderScenarioList();
             renderStepList();
             updateRecordButton();
+            document.getElementById('stepsTitle').textContent = 'Шаги: ' + escapeHtml(data.scenario.name);
         }
     }
 
@@ -529,7 +544,7 @@
         const data = await apiPost('/scenario/rename', { scenario_id: sc.id, name });
         if (data.status === 'ok') {
             sc.name = name;
-            renderScenarioSelect();
+            renderScenarioList();
         }
     }
 
@@ -541,9 +556,10 @@
         if (data.status === 'ok') {
             scenarios = scenarios.filter(s => s.id !== sc.id);
             currentScenarioId = data.current_scenario_id;
-            renderScenarioSelect();
+            renderScenarioList();
             renderStepList();
             updateRecordButton();
+            document.getElementById('stepsTitle').textContent = currentScenarioId ? 'Шаги' : 'Шаги';
         }
     }
 
@@ -668,25 +684,86 @@
         closeStepModal();
     }
 
-    async function replayScenario() {
+    function clearStepHighlights() {
+        document.querySelectorAll('.step-row').forEach(el => {
+            el.classList.remove('active-step', 'step-success', 'step-error');
+        });
+    }
+
+    function setStepHighlight(index, cls) {
+        const el = document.getElementById('step-row-' + index);
+        if (!el) return;
+        el.classList.remove('active-step', 'step-success', 'step-error');
+        el.classList.add(cls);
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    function startReplay() {
         const sc = getCurrentScenario();
         if (!sc || sc.steps.length === 0) return alert('Нет шагов для воспроизведения');
+        if (replayWs) replayWs.close();
+        clearStepHighlights();
+        document.getElementById('btnReplay').style.display = 'none';
+        document.getElementById('btnStopReplay').style.display = 'block';
         document.getElementById('status').textContent = 'Replay running...';
-        const data = await apiPost('/scenario/replay', { scenario_id: sc.id });
-        if (data.status === 'ok') {
-            let okCount = 0, errCount = 0;
-            (data.results || []).forEach(r => {
-                if (r.error) errCount++; else okCount++;
-            });
-            document.getElementById('status').textContent = `Replay done: ${okCount} OK, ${errCount} errors`;
-            if (data.final_image && data.final_image.image) {
-                setScreenshot('data:image/jpeg;base64,' + data.final_image.image);
-                if (data.final_image.elements) renderElements(data.final_image.elements);
-            } else {
-                await refreshScreenshot();
-            }
-        } else {
-            document.getElementById('status').textContent = 'Replay failed: ' + (data.message || '');
+
+        replayWs = new WebSocket('ws://' + location.host + '/ws/replay');
+        replayWs.onopen = () => {
+            replayWs.send(JSON.stringify({ scenario_id: sc.id }));
+        };
+        replayWs.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            handleReplayEvent(data);
+        };
+        replayWs.onclose = () => {
+            document.getElementById('btnReplay').style.display = 'block';
+            document.getElementById('btnStopReplay').style.display = 'none';
+            replayWs = null;
+        };
+        replayWs.onerror = (e) => {
+            document.getElementById('status').textContent = 'Replay WebSocket error';
+        };
+    }
+
+    function stopReplay() {
+        if (replayWs) {
+            replayWs.close();
+            replayWs = null;
+        }
+        document.getElementById('btnReplay').style.display = 'block';
+        document.getElementById('btnStopReplay').style.display = 'none';
+        document.getElementById('status').textContent = 'Replay stopped';
+    }
+
+    function handleReplayEvent(data) {
+        switch (data.type) {
+            case 'step_start':
+                setStepHighlight(data.index, 'active-step');
+                break;
+            case 'screenshot':
+                if (data.image) {
+                    setScreenshot('data:image/jpeg;base64,' + data.image);
+                    if (data.elements) renderElements(data.elements);
+                }
+                break;
+            case 'step_result':
+                setStepHighlight(data.index, data.error ? 'step-error' : 'step-success');
+                break;
+            case 'finish':
+                document.getElementById('btnReplay').style.display = 'block';
+                document.getElementById('btnStopReplay').style.display = 'none';
+                if (data.success) {
+                    document.getElementById('status').textContent = 'Replay finished successfully';
+                } else {
+                    document.getElementById('status').textContent = 'Replay failed at step ' + (data.stopped_at + 1);
+                }
+                if (replayWs) { replayWs.close(); replayWs = null; }
+                break;
+            case 'error':
+                document.getElementById('status').textContent = 'Replay error: ' + data.message;
+                document.getElementById('btnReplay').style.display = 'block';
+                document.getElementById('btnStopReplay').style.display = 'none';
+                break;
         }
     }
 
@@ -724,9 +801,10 @@
             if (data.status === 'ok') {
                 scenarios.push(data.scenario);
                 currentScenarioId = data.scenario.id;
-                renderScenarioSelect();
+                renderScenarioList();
                 renderStepList();
                 updateRecordButton();
+                document.getElementById('stepsTitle').textContent = 'Шаги: ' + escapeHtml(data.scenario.name);
             }
         };
         input.click();

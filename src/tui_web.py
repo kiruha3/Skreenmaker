@@ -266,6 +266,64 @@ async def agent_screenshot():
                 pass
 
 
+# ---- Replay WebSocket ----
+
+@app.websocket("/ws/replay")
+async def replay_websocket(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        msg = await websocket.receive_json()
+        scenario_id = msg.get("scenario_id")
+        s = _scenarios.get(scenario_id)
+        if not s:
+            await websocket.send_json({"type": "error", "message": "Scenario not found"})
+            return
+        sess = get_session()
+        steps = s["steps"]
+        success = True
+        for i, step in enumerate(steps):
+            await websocket.send_json({"type": "step_start", "index": i, "total": len(steps), "action": step})
+            try:
+                result = await sess.act(step)
+            except Exception as e:
+                await websocket.send_json({"type": "step_result", "index": i, "result": None, "error": str(e)})
+                success = False
+                await websocket.send_json({"type": "finish", "success": False, "stopped_at": i})
+                break
+            try:
+                shot = await sess.screenshot_annotated_base64()
+            except Exception:
+                shot = None
+            if shot:
+                elements_raw = shot.get("elements")
+                if elements_raw:
+                    from dataclasses import asdict
+                    elements_serializable = {str(k): asdict(v) for k, v in elements_raw.items()}
+                else:
+                    elements_serializable = None
+                await websocket.send_json({
+                    "type": "screenshot",
+                    "index": i,
+                    "image": shot["image"],
+                    "elements": elements_serializable,
+                })
+            await websocket.send_json({"type": "step_result", "index": i, "result": result, "error": None})
+        if success:
+            await websocket.send_json({"type": "finish", "success": True})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
 # ---- Agent WebSocket ----
 
 @app.websocket("/ws/agent")
