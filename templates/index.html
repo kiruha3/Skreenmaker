@@ -15,21 +15,21 @@
         .toolbar button:hover { background: #0056b3; }
         .toolbar button.secondary { background: #6c757d; }
         .toolbar button.secondary:hover { background: #545b62; }
-        .main { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+        .toolbar button.danger { background: #dc3545; }
+        .toolbar button.danger:hover { background: #c82333; }
+        .main { display: grid; grid-template-columns: 1fr 420px; gap: 16px; }
         @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
         .panel { background: #fff; border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .screenshot-wrap { text-align: center; }
         .screenshot-wrap img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
         .status { font-size: 12px; color: #666; margin-top: 8px; }
-        .elements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto; }
+        .elements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; }
         .el-btn { padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; cursor: pointer; font-size: 12px; text-align: left; word-break: break-word; }
         .el-btn:hover { background: #e9f3ff; border-color: #007bff; }
         .el-btn .num { font-weight: bold; color: #007bff; margin-right: 4px; }
         .section-title { font-size: 14px; font-weight: 600; margin: 12px 0 8px; }
         .quick-btns { display: flex; flex-wrap: wrap; gap: 6px; }
         .quick-btns button { padding: 6px 10px; font-size: 13px; }
-        .history-list { max-height: 160px; overflow-y: auto; font-size: 12px; }
-        .history-item { padding: 4px 0; border-bottom: 1px solid #eee; }
         .type-box { display: flex; gap: 6px; margin-top: 8px; }
         .type-box input { flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 4px; }
 
@@ -64,6 +64,33 @@
         .step-reason { color: #555; margin-top: 4px; }
         .step-result { color: #28a745; margin-top: 4px; }
         .step-error { color: #dc3545; margin-top: 4px; }
+
+        /* Scenario editor */
+        .scenario-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+        .scenario-toolbar select { flex: 1; min-width: 120px; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+        .scenario-toolbar button { padding: 6px 10px; font-size: 12px; }
+        .step-list { max-height: 240px; overflow-y: auto; font-size: 12px; border: 1px solid #eee; border-radius: 4px; padding: 4px; }
+        .step-row { display: flex; align-items: center; gap: 6px; padding: 6px; border-bottom: 1px solid #f0f0f0; }
+        .step-row:last-child { border-bottom: none; }
+        .step-row:hover { background: #f8f9fa; }
+        .step-index { width: 22px; color: #888; font-weight: 600; }
+        .step-info { flex: 1; word-break: break-word; }
+        .step-actions { display: flex; gap: 4px; }
+        .step-actions button { padding: 4px 8px; font-size: 11px; border: none; border-radius: 4px; cursor: pointer; background: #e9ecef; color: #333; }
+        .step-actions button:hover { background: #dee2e6; }
+        .record-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+        .record-bar button { flex: 1; min-width: 90px; padding: 8px; font-size: 12px; }
+        .empty-steps { color: #888; padding: 12px; text-align: center; }
+
+        /* Modal */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.35); align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: #fff; padding: 16px; border-radius: 8px; width: 90%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+        .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+        .modal-row { margin-bottom: 10px; }
+        .modal-row label { display: block; font-size: 12px; margin-bottom: 4px; color: #555; }
+        .modal-row input, .modal-row select { width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+        .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -102,6 +129,8 @@
                         <button onclick="sendAction({'action_type':'press_key','key':'Tab'})">Tab</button>
                         <button onclick="sendAction({'action_type':'scroll','direction':'down'})">↓ Вниз</button>
                         <button onclick="sendAction({'action_type':'scroll','direction':'up'})">↑ Вверх</button>
+                        <button onclick="sendAction({'action_type':'scroll','direction':'left'})">← Влево</button>
+                        <button onclick="sendAction({'action_type':'scroll','direction':'right'})">→ Вправо</button>
                     </div>
 
                     <div class="section-title">Ввод текста</div>
@@ -113,8 +142,23 @@
                 </div>
 
                 <div class="panel" style="margin-top:12px;">
-                    <div class="section-title">История</div>
-                    <div class="history-list" id="historyList"></div>
+                    <div class="section-title">Сценарий</div>
+                    <div class="scenario-toolbar">
+                        <select id="scenarioSelect" onchange="onScenarioSelectChange()"></select>
+                        <button onclick="createScenario()">+ New</button>
+                        <button class="secondary" onclick="renameScenario()">Rename</button>
+                        <button class="danger" onclick="deleteScenario()">Del</button>
+                    </div>
+                    <div class="step-list" id="stepList">
+                        <div class="empty-steps">Нет шагов</div>
+                    </div>
+                    <div class="record-bar">
+                        <button class="secondary" onclick="recordLastAction()" id="btnRecord" disabled>⏺ Record last</button>
+                        <button class="secondary" onclick="openAddStepModal()">+ Add step</button>
+                        <button onclick="replayScenario()">▶ Replay</button>
+                        <button class="secondary" onclick="exportScenario()">Export</button>
+                        <button class="secondary" onclick="importScenario()">Import</button>
+                    </div>
                 </div>
             </div>
 
@@ -150,6 +194,59 @@
     </div>
 </div>
 
+<!-- Modal for editing / adding step -->
+<div id="stepModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-title" id="stepModalTitle">Добавить шаг</div>
+        <div class="modal-row">
+            <label>Action type</label>
+            <select id="modalActionType" onchange="onModalTypeChange()">
+                <option value="click">click</option>
+                <option value="type">type</option>
+                <option value="press_key">press_key</option>
+                <option value="scroll">scroll</option>
+                <option value="navigate">navigate</option>
+                <option value="screenshot">screenshot</option>
+                <option value="wait">wait</option>
+                <option value="hover">hover</option>
+            </select>
+        </div>
+        <div class="modal-row" id="modalRowElement">
+            <label>Element display id</label>
+            <input type="number" id="modalElementId" placeholder="1">
+        </div>
+        <div class="modal-row" id="modalRowText">
+            <label>Text</label>
+            <input type="text" id="modalText" placeholder="Введите текст">
+        </div>
+        <div class="modal-row" id="modalRowKey">
+            <label>Key</label>
+            <input type="text" id="modalKey" placeholder="Enter">
+        </div>
+        <div class="modal-row" id="modalRowUrl">
+            <label>URL</label>
+            <input type="text" id="modalUrl" placeholder="https://...">
+        </div>
+        <div class="modal-row" id="modalRowDirection">
+            <label>Direction</label>
+            <select id="modalDirection">
+                <option value="down">down</option>
+                <option value="up">up</option>
+                <option value="left">left</option>
+                <option value="right">right</option>
+            </select>
+        </div>
+        <div class="modal-row" id="modalRowSeconds">
+            <label>Seconds</label>
+            <input type="number" id="modalSeconds" value="1" min="0">
+        </div>
+        <div class="modal-btns">
+            <button class="secondary" onclick="closeStepModal()">Cancel</button>
+            <button onclick="saveModalStep()">Save</button>
+        </div>
+    </div>
+</div>
+
 <script>
     let lastElementDisplayId = null;
     let history = [];
@@ -157,6 +254,12 @@
     let ws = null;
     let currentStepCard = null;
     let autoRefreshInterval = null;
+
+    // Scenario state
+    let scenarios = [];
+    let currentScenarioId = null;
+    let lastManualAction = null;
+    let modalEditIndex = null;
 
     function setScreenshot(base64Url) {
         const img = new Image();
@@ -187,10 +290,17 @@
         return await res.json();
     }
 
+    async function apiGet(path) {
+        const res = await fetch(path);
+        return await res.json();
+    }
+
     async function navigate() {
         const url = document.getElementById('urlInput').value;
         await apiPost('/navigate', { url });
         await refreshScreenshot();
+        lastManualAction = { action_type: 'navigate', url };
+        updateRecordButton();
         addHistory('navigate', url);
     }
 
@@ -201,7 +311,9 @@
         const result = await apiPost('/act', { action });
         document.getElementById('status').textContent = result.observation || result.status;
         await refreshScreenshot();
-        addHistory(action.action_type, action.element_display_id || action.key || '');
+        lastManualAction = action;
+        updateRecordButton();
+        addHistory(action.action_type, action.element_display_id || action.key || action.direction || '');
     }
 
     async function takeScreenshot() {
@@ -251,29 +363,18 @@
     }
 
     function renderHistory() {
-        const list = document.getElementById('historyList');
-        list.innerHTML = '';
-        history.forEach((h, i) => {
-            const div = document.createElement('div');
-            div.className = 'history-item';
-            div.style.opacity = i === historyIndex ? '1' : '0.5';
-            div.textContent = `${i + 1}. ${h.action} ${h.detail}`;
-            list.appendChild(div);
-        });
-        list.scrollTop = list.scrollHeight;
+        // History replaced by scenario editor
     }
 
     function undo() {
         if (historyIndex > 0) {
             historyIndex--;
-            renderHistory();
         }
     }
 
     function redo() {
         if (historyIndex < history.length - 1) {
             historyIndex++;
-            renderHistory();
         }
     }
 
@@ -288,6 +389,320 @@
             stopAutoRefresh();
         }
     }
+
+    // ================== Scenario Editor ==================
+
+    async function loadScenarios() {
+        const data = await apiGet('/scenario/list');
+        if (data.status === 'ok') {
+            scenarios = data.scenarios || [];
+            currentScenarioId = data.current_scenario_id || null;
+            renderScenarioSelect();
+            renderStepList();
+        }
+    }
+
+    function renderScenarioSelect() {
+        const sel = document.getElementById('scenarioSelect');
+        sel.innerHTML = '';
+        if (scenarios.length === 0) {
+            const opt = document.createElement('option');
+            opt.textContent = 'Нет сценариев';
+            opt.value = '';
+            sel.appendChild(opt);
+            return;
+        }
+        for (const s of scenarios) {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.name;
+            if (s.id === currentScenarioId) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+
+    function getCurrentScenario() {
+        return scenarios.find(s => s.id === currentScenarioId) || null;
+    }
+
+    function renderStepList() {
+        const container = document.getElementById('stepList');
+        const sc = getCurrentScenario();
+        if (!sc || sc.steps.length === 0) {
+            container.innerHTML = '<div class="empty-steps">Нет шагов</div>';
+            return;
+        }
+        container.innerHTML = '';
+        sc.steps.forEach((step, idx) => {
+            const row = document.createElement('div');
+            row.className = 'step-row';
+            const info = formatStepInfo(step);
+            row.innerHTML = `
+                <div class="step-index">${idx + 1}</div>
+                <div class="step-info">${escapeHtml(info)}</div>
+                <div class="step-actions">
+                    <button onclick="moveStep(${idx}, -1)" title="Up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                    <button onclick="moveStep(${idx}, 1)" title="Down" ${idx === sc.steps.length - 1 ? 'disabled' : ''}>↓</button>
+                    <button onclick="duplicateStep(${idx})" title="Duplicate">⧉</button>
+                    <button onclick="editStep(${idx})" title="Edit">✎</button>
+                    <button onclick="deleteStep(${idx})" title="Delete" style="background:#dc3545;color:#fff;">×</button>
+                </div>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    function formatStepInfo(step) {
+        const parts = [step.action_type];
+        if (step.element_display_id != null) parts.push(`#${step.element_display_id}`);
+        if (step.text) parts.push(`"${step.text}"`);
+        if (step.key) parts.push(`key:${step.key}`);
+        if (step.url) parts.push(step.url);
+        if (step.direction) parts.push(step.direction);
+        if (step.seconds != null) parts.push(`${step.seconds}s`);
+        return parts.join(' ');
+    }
+
+    function updateRecordButton() {
+        const btn = document.getElementById('btnRecord');
+        btn.disabled = !lastManualAction || !currentScenarioId;
+    }
+
+    async function onScenarioSelectChange() {
+        const sel = document.getElementById('scenarioSelect');
+        const id = sel.value;
+        if (!id) return;
+        await apiPost('/scenario/select', { scenario_id: id });
+        currentScenarioId = id;
+        renderStepList();
+        updateRecordButton();
+    }
+
+    async function createScenario() {
+        const name = prompt('Название сценария:', 'New scenario');
+        if (!name) return;
+        const data = await apiPost('/scenario/create', { name });
+        if (data.status === 'ok') {
+            scenarios.push(data.scenario);
+            currentScenarioId = data.scenario.id;
+            renderScenarioSelect();
+            renderStepList();
+            updateRecordButton();
+        }
+    }
+
+    async function renameScenario() {
+        const sc = getCurrentScenario();
+        if (!sc) return alert('Сначала выберите или создайте сценарий');
+        const name = prompt('Новое название:', sc.name);
+        if (!name) return;
+        const data = await apiPost('/scenario/rename', { scenario_id: sc.id, name });
+        if (data.status === 'ok') {
+            sc.name = name;
+            renderScenarioSelect();
+        }
+    }
+
+    async function deleteScenario() {
+        const sc = getCurrentScenario();
+        if (!sc) return;
+        if (!confirm(`Удалить сценарий "${sc.name}"?`)) return;
+        const data = await apiPost('/scenario/delete', { scenario_id: sc.id });
+        if (data.status === 'ok') {
+            scenarios = scenarios.filter(s => s.id !== sc.id);
+            currentScenarioId = data.current_scenario_id;
+            renderScenarioSelect();
+            renderStepList();
+            updateRecordButton();
+        }
+    }
+
+    async function recordLastAction() {
+        if (!lastManualAction || !currentScenarioId) return;
+        const data = await apiPost('/scenario/step/add', { scenario_id: currentScenarioId, action: lastManualAction });
+        if (data.status === 'ok') {
+            const sc = getCurrentScenario();
+            if (sc) sc.steps.push(lastManualAction);
+            renderStepList();
+        }
+    }
+
+    async function moveStep(index, direction) {
+        const sc = getCurrentScenario();
+        if (!sc) return;
+        const data = await apiPost('/scenario/step/move', { scenario_id: sc.id, step_index: index, direction });
+        if (data.status === 'ok') {
+            const temp = sc.steps[index];
+            sc.steps[index] = sc.steps[index + direction];
+            sc.steps[index + direction] = temp;
+            renderStepList();
+        }
+    }
+
+    async function duplicateStep(index) {
+        const sc = getCurrentScenario();
+        if (!sc) return;
+        const data = await apiPost('/scenario/step/duplicate', { scenario_id: sc.id, step_index: index });
+        if (data.status === 'ok') {
+            sc.steps.splice(index + 1, 0, JSON.parse(JSON.stringify(sc.steps[index])));
+            renderStepList();
+        }
+    }
+
+    async function deleteStep(index) {
+        const sc = getCurrentScenario();
+        if (!sc) return;
+        if (!confirm('Удалить шаг?')) return;
+        const data = await apiPost('/scenario/step/delete', { scenario_id: sc.id, step_index: index });
+        if (data.status === 'ok') {
+            sc.steps.splice(index, 1);
+            renderStepList();
+        }
+    }
+
+    function editStep(index) {
+        const sc = getCurrentScenario();
+        if (!sc) return;
+        modalEditIndex = index;
+        const step = sc.steps[index];
+        document.getElementById('stepModalTitle').textContent = 'Редактировать шаг';
+        fillModal(step);
+        document.getElementById('stepModal').classList.add('active');
+    }
+
+    function openAddStepModal() {
+        if (!currentScenarioId) return alert('Сначала создайте сценарий');
+        modalEditIndex = null;
+        document.getElementById('stepModalTitle').textContent = 'Добавить шаг';
+        fillModal({ action_type: 'click' });
+        document.getElementById('stepModal').classList.add('active');
+    }
+
+    function fillModal(step) {
+        document.getElementById('modalActionType').value = step.action_type || 'click';
+        document.getElementById('modalElementId').value = step.element_display_id || '';
+        document.getElementById('modalText').value = step.text || '';
+        document.getElementById('modalKey').value = step.key || '';
+        document.getElementById('modalUrl').value = step.url || '';
+        document.getElementById('modalDirection').value = step.direction || 'down';
+        document.getElementById('modalSeconds').value = step.seconds != null ? step.seconds : 1;
+        onModalTypeChange();
+    }
+
+    function onModalTypeChange() {
+        const type = document.getElementById('modalActionType').value;
+        const show = (id, visible) => document.getElementById(id).style.display = visible ? 'block' : 'none';
+        show('modalRowElement', ['click','type','hover'].includes(type));
+        show('modalRowText', ['type'].includes(type));
+        show('modalRowKey', ['press_key'].includes(type));
+        show('modalRowUrl', ['navigate'].includes(type));
+        show('modalRowDirection', ['scroll'].includes(type));
+        show('modalRowSeconds', ['wait'].includes(type));
+    }
+
+    function closeStepModal() {
+        document.getElementById('stepModal').classList.remove('active');
+    }
+
+    async function saveModalStep() {
+        const type = document.getElementById('modalActionType').value;
+        const action = { action_type: type };
+        const val = (id) => {
+            const el = document.getElementById(id);
+            return el.value ? el.value : undefined;
+        };
+        if (['click','type','hover'].includes(type)) {
+            const eid = parseInt(val('modalElementId') || '0');
+            if (eid) action.element_display_id = eid;
+        }
+        if (type === 'type') action.text = val('modalText');
+        if (type === 'press_key') action.key = val('modalKey');
+        if (type === 'navigate') action.url = val('modalUrl');
+        if (type === 'scroll') action.direction = val('modalDirection');
+        if (type === 'wait') action.seconds = parseInt(val('modalSeconds') || '0');
+
+        const sc = getCurrentScenario();
+        if (!sc) return;
+        if (modalEditIndex !== null) {
+            const data = await apiPost('/scenario/step/update', { scenario_id: sc.id, step_index: modalEditIndex, action });
+            if (data.status === 'ok') {
+                sc.steps[modalEditIndex] = action;
+            }
+        } else {
+            const data = await apiPost('/scenario/step/add', { scenario_id: sc.id, action });
+            if (data.status === 'ok') {
+                sc.steps.push(action);
+            }
+        }
+        renderStepList();
+        closeStepModal();
+    }
+
+    async function replayScenario() {
+        const sc = getCurrentScenario();
+        if (!sc || sc.steps.length === 0) return alert('Нет шагов для воспроизведения');
+        document.getElementById('status').textContent = 'Replay running...';
+        const data = await apiPost('/scenario/replay', { scenario_id: sc.id });
+        if (data.status === 'ok') {
+            let okCount = 0, errCount = 0;
+            (data.results || []).forEach(r => {
+                if (r.error) errCount++; else okCount++;
+            });
+            document.getElementById('status').textContent = `Replay done: ${okCount} OK, ${errCount} errors`;
+            if (data.final_image && data.final_image.image) {
+                setScreenshot('data:image/jpeg;base64,' + data.final_image.image);
+                if (data.final_image.elements) renderElements(data.final_image.elements);
+            } else {
+                await refreshScreenshot();
+            }
+        } else {
+            document.getElementById('status').textContent = 'Replay failed: ' + (data.message || '');
+        }
+    }
+
+    async function exportScenario() {
+        const sc = getCurrentScenario();
+        if (!sc) return alert('Сначала выберите сценарий');
+        const data = await apiPost('/scenario/export', { scenario_id: sc.id });
+        if (data.status === 'ok') {
+            const blob = new Blob([data.json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (sc.name || 'scenario') + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    async function importScenario() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const text = await file.text();
+            let obj;
+            try {
+                obj = JSON.parse(text);
+            } catch (err) {
+                alert('Invalid JSON');
+                return;
+            }
+            const data = await apiPost('/scenario/import', { name: obj.name || file.name.replace(/\.json$/i, ''), steps: obj.steps || [] });
+            if (data.status === 'ok') {
+                scenarios.push(data.scenario);
+                currentScenarioId = data.scenario.id;
+                renderScenarioSelect();
+                renderStepList();
+                updateRecordButton();
+            }
+        };
+        input.click();
+    }
+
+    // ================== Agent WebSocket ==================
 
     function startAgent() {
         if (ws) ws.close();
@@ -411,6 +826,7 @@
     (async () => {
         await refreshScreenshot();
         startAutoRefresh();
+        await loadScenarios();
     })();
 </script>
 </body>

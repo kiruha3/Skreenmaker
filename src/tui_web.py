@@ -1,14 +1,15 @@
 import asyncio
 import os
-from typing import Optional
-
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-
+import uuid
+import json
 import tempfile
 import base64
+from typing import Optional, Dict, Any, List
+
+from fastapi import Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from src.server import app as server_app, get_session
 from src.agent import BrowserAgent
@@ -23,11 +24,222 @@ templates = Jinja2Templates(directory=templates_dir)
 
 _active_agent: Optional[BrowserAgent] = None
 
+# In-memory хранилище сценариев
+_scenarios: Dict[str, Dict[str, Any]] = {}
+_current_scenario_id: Optional[str] = None
+
+
+def _new_scenario_id() -> str:
+    return str(uuid.uuid4())[:8]
+
+
+# ---------- Pydantic models ----------
+
+class ScenarioCreate(BaseModel):
+    name: str
+
+
+class ScenarioRename(BaseModel):
+    scenario_id: str
+    name: str
+
+
+class ScenarioSelect(BaseModel):
+    scenario_id: str
+
+
+class StepAdd(BaseModel):
+    scenario_id: str
+    action: Dict[str, Any]
+
+
+class StepUpdate(BaseModel):
+    scenario_id: str
+    step_index: int
+    action: Dict[str, Any]
+
+
+class StepMove(BaseModel):
+    scenario_id: str
+    step_index: int
+    direction: int
+
+
+class StepIndex(BaseModel):
+    scenario_id: str
+    step_index: int
+
+
+class ReplayRequest(BaseModel):
+    scenario_id: str
+
+
+class ImportRequest(BaseModel):
+    name: Optional[str] = None
+    steps: List[Dict[str, Any]]
+
+
+# ---------- Routes ----------
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+
+# ---- Scenario CRUD ----
+
+@app.post("/scenario/create")
+async def scenario_create(req: ScenarioCreate):
+    global _current_scenario_id
+    sid = _new_scenario_id()
+    _scenarios[sid] = {"id": sid, "name": req.name, "steps": []}
+    _current_scenario_id = sid
+    return {"status": "ok", "scenario": _scenarios[sid]}
+
+
+@app.post("/scenario/rename")
+async def scenario_rename(req: ScenarioRename):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    s["name"] = req.name
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/delete")
+async def scenario_delete(req: ScenarioSelect):
+    global _current_scenario_id
+    _scenarios.pop(req.scenario_id, None)
+    if _current_scenario_id == req.scenario_id:
+        _current_scenario_id = next(iter(_scenarios.keys()), None)
+    return {"status": "ok", "current_scenario_id": _current_scenario_id}
+
+
+@app.get("/scenario/list")
+async def scenario_list():
+    return {
+        "status": "ok",
+        "scenarios": list(_scenarios.values()),
+        "current_scenario_id": _current_scenario_id,
+    }
+
+
+@app.get("/scenario/{scenario_id}")
+async def scenario_get(scenario_id: str):
+    s = _scenarios.get(scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/select")
+async def scenario_select(req: ScenarioSelect):
+    global _current_scenario_id
+    if req.scenario_id not in _scenarios:
+        return {"status": "error", "message": "Scenario not found"}
+    _current_scenario_id = req.scenario_id
+    return {"status": "ok", "scenario": _scenarios[req.scenario_id]}
+
+
+# ---- Steps ----
+
+@app.post("/scenario/step/add")
+async def scenario_step_add(req: StepAdd):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    s["steps"].append(req.action)
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/step/update")
+async def scenario_step_update(req: StepUpdate):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    if not (0 <= req.step_index < len(s["steps"])):
+        return {"status": "error", "message": "Invalid step index"}
+    s["steps"][req.step_index] = req.action
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/step/delete")
+async def scenario_step_delete(req: StepIndex):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    if not (0 <= req.step_index < len(s["steps"])):
+        return {"status": "error", "message": "Invalid step index"}
+    s["steps"].pop(req.step_index)
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/step/move")
+async def scenario_step_move(req: StepMove):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    idx = req.step_index
+    new_idx = idx + req.direction
+    if not (0 <= idx < len(s["steps"]) and 0 <= new_idx < len(s["steps"])):
+        return {"status": "error", "message": "Cannot move step"}
+    s["steps"][idx], s["steps"][new_idx] = s["steps"][new_idx], s["steps"][idx]
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/step/duplicate")
+async def scenario_step_duplicate(req: StepIndex):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    if not (0 <= req.step_index < len(s["steps"])):
+        return {"status": "error", "message": "Invalid step index"}
+    s["steps"].insert(req.step_index + 1, dict(s["steps"][req.step_index]))
+    return {"status": "ok", "scenario": s}
+
+
+# ---- Import / Export / Replay ----
+
+@app.post("/scenario/export")
+async def scenario_export(req: ScenarioSelect):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    return {"status": "ok", "json": json.dumps({"name": s["name"], "steps": s["steps"]}, ensure_ascii=False, indent=2)}
+
+
+@app.post("/scenario/import")
+async def scenario_import(req: ImportRequest):
+    global _current_scenario_id
+    sid = _new_scenario_id()
+    name = req.name or f"Imported {sid}"
+    _scenarios[sid] = {"id": sid, "name": name, "steps": list(req.steps)}
+    _current_scenario_id = sid
+    return {"status": "ok", "scenario": _scenarios[sid]}
+
+
+@app.post("/scenario/replay")
+async def scenario_replay(req: ReplayRequest):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    sess = get_session()
+    results = []
+    for step in s["steps"]:
+        try:
+            result = await sess.act(step)
+            results.append({"action": step, "result": result, "error": None})
+        except Exception as e:
+            results.append({"action": step, "result": None, "error": str(e)})
+            break
+    try:
+        final_shot = await sess.screenshot_annotated_base64()
+    except Exception:
+        final_shot = None
+    return {"status": "ok", "results": results, "final_image": final_shot}
+
+
+# ---- Agent screenshot ----
 
 @app.post("/agent_screenshot")
 async def agent_screenshot():
@@ -53,6 +265,8 @@ async def agent_screenshot():
             except Exception:
                 pass
 
+
+# ---- Agent WebSocket ----
 
 @app.websocket("/ws/agent")
 async def agent_websocket(websocket: WebSocket):
