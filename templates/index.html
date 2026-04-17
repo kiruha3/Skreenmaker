@@ -80,6 +80,8 @@
         .step-actions button:hover { background: #dee2e6; }
         .record-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
         .record-bar button { flex: 1; min-width: 90px; padding: 8px; font-size: 12px; }
+        .record-bar button.recording { background: #dc3545; color: #fff; }
+        .record-bar button.recording:hover { background: #c82333; }
         .empty-steps { color: #888; padding: 12px; text-align: center; }
 
         /* Modal */
@@ -154,6 +156,7 @@
                     </div>
                     <div class="record-bar">
                         <button class="secondary" onclick="recordLastAction()" id="btnRecord" disabled>⏺ Record last</button>
+                        <button class="secondary" onclick="toggleAutoRecord()" id="btnAutoRecord" disabled>⏺ Запись</button>
                         <button class="secondary" onclick="openAddStepModal()">+ Add step</button>
                         <button onclick="replayScenario()">▶ Replay</button>
                         <button class="secondary" onclick="exportScenario()">Export</button>
@@ -260,6 +263,7 @@
     let currentScenarioId = null;
     let lastManualAction = null;
     let modalEditIndex = null;
+    let autoRecordEnabled = false;
 
     function setScreenshot(base64Url) {
         const img = new Image();
@@ -301,6 +305,7 @@
         await refreshScreenshot();
         lastManualAction = { action_type: 'navigate', url };
         updateRecordButton();
+        await maybeAutoRecord();
         addHistory('navigate', url);
     }
 
@@ -313,6 +318,7 @@
         await refreshScreenshot();
         lastManualAction = action;
         updateRecordButton();
+        await maybeAutoRecord();
         addHistory(action.action_type, action.element_display_id || action.key || action.direction || '');
     }
 
@@ -466,6 +472,30 @@
     function updateRecordButton() {
         const btn = document.getElementById('btnRecord');
         btn.disabled = !lastManualAction || !currentScenarioId;
+        const btnAuto = document.getElementById('btnAutoRecord');
+        btnAuto.disabled = !currentScenarioId;
+    }
+
+    function toggleAutoRecord() {
+        autoRecordEnabled = !autoRecordEnabled;
+        const btn = document.getElementById('btnAutoRecord');
+        if (autoRecordEnabled) {
+            btn.textContent = '⏹ Стоп';
+            btn.classList.add('recording');
+        } else {
+            btn.textContent = '⏺ Запись';
+            btn.classList.remove('recording');
+        }
+    }
+
+    async function maybeAutoRecord() {
+        if (!autoRecordEnabled || !lastManualAction || !currentScenarioId) return;
+        const data = await apiPost('/scenario/step/add', { scenario_id: currentScenarioId, action: lastManualAction });
+        if (data.status === 'ok') {
+            const sc = getCurrentScenario();
+            if (sc) sc.steps.push(lastManualAction);
+            renderStepList();
+        }
     }
 
     async function onScenarioSelectChange() {
