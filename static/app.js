@@ -293,6 +293,21 @@ createApp({
         const lastElementDisplayId = ref(null);
         const lastManualAction = ref(null);
 
+        // Screenshot zoom
+        const zoom = ref(1);
+        const imgNaturalWidth = ref(0);
+        const imgNaturalHeight = ref(0);
+        const onImgLoad = (e) => {
+            imgNaturalWidth.value = e.target.naturalWidth;
+            imgNaturalHeight.value = e.target.naturalHeight;
+        };
+        const setFitZoom = () => {
+            const viewport = document.querySelector('.screenshot-viewport');
+            if (viewport && imgNaturalWidth.value) {
+                zoom.value = Math.min(1, viewport.clientWidth / imgNaturalWidth.value);
+            }
+        };
+
         // Scenario state
         const scenarios = ref([]);
         const currentScenarioId = ref(null);
@@ -884,6 +899,7 @@ createApp({
             autoRecordEnabled, replayDelay, replayRunning, stepHighlights,
             modalVisible, modalEditIndex, modalInitial,
             agentRunning, lastManualAction,
+            zoom, imgNaturalWidth, imgNaturalHeight,
             navigate, sendAction, takeScreenshot, typeText, refreshScreenshot, switchTab,
             createScenario, selectScenario, renameScenario, deleteScenario,
             addTag, removeTag, setGroup,
@@ -894,7 +910,7 @@ createApp({
             addScenarioToSequence, removeScenarioFromSequence, reorderSequence,
             startSequenceReplay, stopSequenceReplay,
             startAgent, stopAgent, takeStepScreenshot,
-            escapeHtml
+            onImgLoad, setFitZoom, escapeHtml
         };
     },
     template: `
@@ -911,7 +927,24 @@ createApp({
                 <div class="main-inner-grid">
                     <div class="left-col">
                         <div class="panel screenshot-wrap">
-                            <img :src="screenshot" alt="Annotated screenshot">
+                            <div class="screenshot-viewport">
+                                <div class="zoom-layer"
+                                     :style="{
+                                         width: (imgNaturalWidth * zoom) + 'px',
+                                         height: (imgNaturalHeight * zoom) + 'px'
+                                     }">
+                                    <img :src="screenshot"
+                                         @load="onImgLoad"
+                                         :style="{ transform: 'scale(' + zoom + ')', transformOrigin: 'top left', width: '100%', height: '100%', display: 'block' }"
+                                         alt="Annotated screenshot">
+                                </div>
+                            </div>
+                            <div class="zoom-bar">
+                                <button class="secondary" @click="setFitZoom">Fit</button>
+                                <input type="range" min="0.25" max="2" step="0.05" v-model.number="zoom">
+                                <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
+                                <button class="secondary" @click="zoom = 1">100%</button>
+                            </div>
                             <div class="status">{{ status }}</div>
                         </div>
                         <div class="panel flow-panel-wrap">
