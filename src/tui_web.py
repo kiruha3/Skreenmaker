@@ -29,38 +29,55 @@ templates = Jinja2Templates(directory=templates_dir)
 
 _active_agent: Optional[BrowserAgent] = None
 
-# In-memory хранилище сценариев
+# In-memory хранилище сценариев и последовательностей
 _scenarios: Dict[str, Dict[str, Any]] = {}
 _current_scenario_id: Optional[str] = None
+_sequences: Dict[str, Dict[str, Any]] = {}
+_current_sequence_id: Optional[str] = None
 
 SCENARIOS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scenarios.json")
 
 
 def _load_scenarios():
-    global _scenarios, _current_scenario_id
+    global _scenarios, _current_scenario_id, _sequences, _current_sequence_id
     if os.path.exists(SCENARIOS_FILE):
         try:
             with open(SCENARIOS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             _scenarios = data.get("scenarios", {})
             _current_scenario_id = data.get("current_scenario_id")
+            _sequences = data.get("sequences", {})
+            _current_sequence_id = data.get("current_sequence_id")
         except Exception:
             _scenarios = {}
             _current_scenario_id = None
+            _sequences = {}
+            _current_sequence_id = None
     else:
         _scenarios = {}
         _current_scenario_id = None
+        _sequences = {}
+        _current_sequence_id = None
 
 
 def _save_scenarios():
     try:
         with open(SCENARIOS_FILE, "w", encoding="utf-8") as f:
-            json.dump({"scenarios": _scenarios, "current_scenario_id": _current_scenario_id}, f, ensure_ascii=False, indent=2)
+            json.dump({
+                "scenarios": _scenarios,
+                "current_scenario_id": _current_scenario_id,
+                "sequences": _sequences,
+                "current_sequence_id": _current_sequence_id,
+            }, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
 
 def _new_scenario_id() -> str:
+    return str(uuid.uuid4())[:8]
+
+
+def _new_sequence_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
@@ -113,11 +130,45 @@ class ImportRequest(BaseModel):
     steps: List[Dict[str, Any]]
 
 
+class SequenceCreate(BaseModel):
+    name: str
+    scenario_ids: Optional[List[str]] = None
+
+
+class SequenceRename(BaseModel):
+    sequence_id: str
+    name: str
+
+
+class SequenceSelect(BaseModel):
+    sequence_id: str
+
+
+class SequenceReorder(BaseModel):
+    sequence_id: str
+    scenario_ids: List[str]
+
+
+class TagAdd(BaseModel):
+    scenario_id: str
+    tag: str
+
+
+class TagRemove(BaseModel):
+    scenario_id: str
+    tag: str
+
+
+class GroupSet(BaseModel):
+    scenario_id: str
+    group: Optional[str] = None
+
+
 # ---------- Routes ----------
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 # ---- Scenario CRUD ----
@@ -126,7 +177,7 @@ async def index(request: Request):
 async def scenario_create(req: ScenarioCreate):
     global _current_scenario_id
     sid = _new_scenario_id()
-    _scenarios[sid] = {"id": sid, "name": req.name, "steps": []}
+    _scenarios[sid] = {"id": sid, "name": req.name, "steps": [], "tags": [], "group": None}
     _current_scenario_id = sid
     _save_scenarios()
     return {"status": "ok", "scenario": _scenarios[sid]}
@@ -148,6 +199,10 @@ async def scenario_delete(req: ScenarioSelect):
     _scenarios.pop(req.scenario_id, None)
     if _current_scenario_id == req.scenario_id:
         _current_scenario_id = next(iter(_scenarios.keys()), None)
+    # Удаляем сценарий из всех последовательностей
+    for seq in _sequences.values():
+        if req.scenario_id in seq.get("scenario_ids", []):
+            seq["scenario_ids"] = [sid for sid in seq["scenario_ids"] if sid != req.scenario_id]
     _save_scenarios()
     return {"status": "ok", "current_scenario_id": _current_scenario_id}
 
@@ -177,6 +232,42 @@ async def scenario_select(req: ScenarioSelect):
     _current_scenario_id = req.scenario_id
     _save_scenarios()
     return {"status": "ok", "scenario": _scenarios[req.scenario_id]}
+
+
+# ---- Tags / Groups ----
+
+@app.post("/scenario/tag/add")
+async def scenario_tag_add(req: TagAdd):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    tag = req.tag.strip().lower()
+    if tag and tag not in s.get("tags", []):
+        s.setdefault("tags", []).append(tag)
+        _save_scenarios()
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/tag/remove")
+async def scenario_tag_remove(req: TagRemove):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    tag = req.tag.strip().lower()
+    if tag in s.get("tags", []):
+        s["tags"] = [t for t in s["tags"] if t != tag]
+        _save_scenarios()
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/group/set")
+async def scenario_group_set(req: GroupSet):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    s["group"] = req.group.strip() if req.group else None
+    _save_scenarios()
+    return {"status": "ok", "scenario": s}
 
 
 # ---- Steps ----
@@ -258,7 +349,7 @@ async def scenario_export(req: ScenarioSelect):
     s = _scenarios.get(req.scenario_id)
     if not s:
         return {"status": "error", "message": "Scenario not found"}
-    return {"status": "ok", "json": json.dumps({"name": s["name"], "steps": s["steps"]}, ensure_ascii=False, indent=2)}
+    return {"status": "ok", "json": json.dumps({"name": s["name"], "steps": s["steps"], "tags": s.get("tags", []), "group": s.get("group")}, ensure_ascii=False, indent=2)}
 
 
 @app.post("/scenario/import")
@@ -273,7 +364,7 @@ async def scenario_import(req: ImportRequest):
             validated_steps.append(AgentAction(**step).model_dump())
         except Exception as e:
             return {"status": "error", "message": f"Invalid step: {e}"}
-    _scenarios[sid] = {"id": sid, "name": name, "steps": validated_steps}
+    _scenarios[sid] = {"id": sid, "name": name, "steps": validated_steps, "tags": [], "group": None}
     _current_scenario_id = sid
     _save_scenarios()
     return {"status": "ok", "scenario": _scenarios[sid]}
@@ -298,6 +389,99 @@ async def scenario_replay(req: ReplayRequest):
     except Exception:
         final_shot = None
     return {"status": "ok", "results": results, "final_image": final_shot}
+
+
+# ---- Sequences CRUD ----
+
+@app.post("/sequence/create")
+async def sequence_create(req: SequenceCreate):
+    global _current_sequence_id
+    sid = _new_sequence_id()
+    _sequences[sid] = {"id": sid, "name": req.name, "scenario_ids": req.scenario_ids or []}
+    _current_sequence_id = sid
+    _save_scenarios()
+    return {"status": "ok", "sequence": _sequences[sid]}
+
+
+@app.post("/sequence/rename")
+async def sequence_rename(req: SequenceRename):
+    seq = _sequences.get(req.sequence_id)
+    if not seq:
+        return {"status": "error", "message": "Sequence not found"}
+    seq["name"] = req.name
+    _save_scenarios()
+    return {"status": "ok", "sequence": seq}
+
+
+@app.post("/sequence/delete")
+async def sequence_delete(req: SequenceSelect):
+    global _current_sequence_id
+    _sequences.pop(req.sequence_id, None)
+    if _current_sequence_id == req.sequence_id:
+        _current_sequence_id = next(iter(_sequences.keys()), None)
+    _save_scenarios()
+    return {"status": "ok", "current_sequence_id": _current_sequence_id}
+
+
+@app.get("/sequence/list")
+async def sequence_list():
+    return {
+        "status": "ok",
+        "sequences": list(_sequences.values()),
+        "current_sequence_id": _current_sequence_id,
+    }
+
+
+@app.get("/sequence/{sequence_id}")
+async def sequence_get(sequence_id: str):
+    seq = _sequences.get(sequence_id)
+    if not seq:
+        return {"status": "error", "message": "Sequence not found"}
+    return {"status": "ok", "sequence": seq}
+
+
+@app.post("/sequence/select")
+async def sequence_select(req: SequenceSelect):
+    global _current_sequence_id
+    if req.sequence_id not in _sequences:
+        return {"status": "error", "message": "Sequence not found"}
+    _current_sequence_id = req.sequence_id
+    _save_scenarios()
+    return {"status": "ok", "sequence": _sequences[req.sequence_id]}
+
+
+@app.post("/sequence/reorder")
+async def sequence_reorder(req: SequenceReorder):
+    seq = _sequences.get(req.sequence_id)
+    if not seq:
+        return {"status": "error", "message": "Sequence not found"}
+    # Фильтруем только существующие сценарии
+    valid_ids = [sid for sid in req.scenario_ids if sid in _scenarios]
+    seq["scenario_ids"] = valid_ids
+    _save_scenarios()
+    return {"status": "ok", "sequence": seq}
+
+
+@app.post("/sequence/add_scenario")
+async def sequence_add_scenario(req: SequenceReorder):
+    seq = _sequences.get(req.sequence_id)
+    if not seq:
+        return {"status": "error", "message": "Sequence not found"}
+    for sid in req.scenario_ids:
+        if sid in _scenarios and sid not in seq["scenario_ids"]:
+            seq["scenario_ids"].append(sid)
+    _save_scenarios()
+    return {"status": "ok", "sequence": seq}
+
+
+@app.post("/sequence/remove_scenario")
+async def sequence_remove_scenario(req: SequenceReorder):
+    seq = _sequences.get(req.sequence_id)
+    if not seq:
+        return {"status": "error", "message": "Sequence not found"}
+    seq["scenario_ids"] = [sid for sid in seq["scenario_ids"] if sid not in req.scenario_ids]
+    _save_scenarios()
+    return {"status": "ok", "sequence": seq}
 
 
 # ---- Agent screenshot ----
@@ -374,6 +558,83 @@ async def replay_websocket(websocket: WebSocket):
             await websocket.send_json({"type": "step_result", "index": i, "result": result, "error": None})
         if success:
             await websocket.send_json({"type": "finish", "success": True})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+# ---- Sequence Replay WebSocket ----
+
+@app.websocket("/ws/replay_sequence")
+async def replay_sequence_websocket(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        msg = await websocket.receive_json()
+        sequence_id = msg.get("sequence_id")
+        seq = _sequences.get(sequence_id)
+        if not seq:
+            await websocket.send_json({"type": "error", "message": "Sequence not found"})
+            return
+        sess = get_session()
+        scenario_ids = seq.get("scenario_ids", [])
+        delay = float(msg.get("delay", 0.5))
+        inter_scenario_delay = float(msg.get("inter_scenario_delay", 1.0))
+        await websocket.send_json({"type": "sequence_start", "sequence_id": sequence_id, "total_scenarios": len(scenario_ids)})
+        overall_success = True
+        for sc_idx, sid in enumerate(scenario_ids):
+            s = _scenarios.get(sid)
+            if not s:
+                await websocket.send_json({"type": "scenario_start", "scenario_index": sc_idx, "scenario_id": sid, "name": "(deleted)", "total_steps": 0})
+                await websocket.send_json({"type": "scenario_result", "scenario_index": sc_idx, "scenario_id": sid, "skipped": True, "error": "Scenario not found"})
+                continue
+            steps = s["steps"]
+            await websocket.send_json({"type": "scenario_start", "scenario_index": sc_idx, "scenario_id": sid, "name": s["name"], "total_steps": len(steps)})
+            scenario_success = True
+            for i, step in enumerate(steps):
+                await websocket.send_json({"type": "step_start", "scenario_index": sc_idx, "step_index": i, "total_steps": len(steps), "action": step})
+                if delay > 0 and (i > 0 or sc_idx > 0):
+                    await asyncio.sleep(delay)
+                try:
+                    result = await sess.act(step)
+                except Exception as e:
+                    await websocket.send_json({"type": "step_result", "scenario_index": sc_idx, "step_index": i, "result": None, "error": str(e)})
+                    scenario_success = False
+                    overall_success = False
+                    await websocket.send_json({"type": "scenario_result", "scenario_index": sc_idx, "scenario_id": sid, "success": False, "stopped_at": i})
+                    break
+                try:
+                    shot = await sess.screenshot_annotated_base64()
+                except Exception:
+                    shot = None
+                if shot:
+                    elements_raw = shot.get("elements")
+                    if elements_raw:
+                        from dataclasses import asdict
+                        elements_serializable = {str(k): asdict(v) for k, v in elements_raw.items()}
+                    else:
+                        elements_serializable = None
+                    await websocket.send_json({
+                        "type": "screenshot",
+                        "scenario_index": sc_idx,
+                        "step_index": i,
+                        "image": shot["image"],
+                        "elements": elements_serializable,
+                    })
+                await websocket.send_json({"type": "step_result", "scenario_index": sc_idx, "step_index": i, "result": result, "error": None})
+            if scenario_success:
+                await websocket.send_json({"type": "scenario_result", "scenario_index": sc_idx, "scenario_id": sid, "success": True})
+            if sc_idx < len(scenario_ids) - 1 and inter_scenario_delay > 0:
+                await asyncio.sleep(inter_scenario_delay)
+        await websocket.send_json({"type": "finish", "success": overall_success})
     except WebSocketDisconnect:
         pass
     except Exception as e:
