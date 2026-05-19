@@ -54,7 +54,20 @@ pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-### 5. Конфигурация (опционально)
+### 5. Сборка фронтенда (для Web TUI)
+
+Требуется Node.js 18+.
+
+```bash
+cd .tmp-build
+npm install
+npx vite build
+cd ..
+```
+
+После сборки в `static/dist/` появятся `app.mjs` и `app.css`.
+
+### 6. Конфигурация (опционально)
 
 Для автономного режима требуется API-ключ. Создайте файл `.env` в корне проекта:
 

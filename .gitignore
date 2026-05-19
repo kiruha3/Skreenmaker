@@ -37,10 +37,12 @@ output/
 
 # Temporary folders
 .tmp/
-.tmp-build/
 
 # Node
 node_modules/
+
+# Build artifacts
+static/dist/
 
 # Graphify artifacts
 graphify-out/
