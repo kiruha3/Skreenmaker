@@ -1,20 +1,33 @@
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
 env/
 venv/
 .venv/
 .venv_graphify/
-.env
-*.egg-info/
-dist/
-build/
+
+# Testing
 .pytest_cache/
 .mypy_cache/
+
+# Secrets
+.env
+
+# Output data
 output/
+
+# Logs
 *.log
+
+# OS / Editor
 .DS_Store
 *.swp
 *.swo
@@ -22,5 +35,28 @@ output/
 .idea/
 .vscode/
 
-scenarios.json
+# Temporary folders
+.tmp/
+.tmp-build/
 
+# Node
+node_modules/
+
+# Graphify artifacts
+graphify-out/
+src/graphify-out/
+
+# Kimi local files
+.kimi/
+
+# Project-specific generated files
+scenarios.json
+test_login.json
+
+# Legacy test scripts in repo root (proper tests live in tests/)
+/test_browser.py
+/test_dreamdox_*.py
+/test_layout.py
+/test_login.json
+/test_phase*.py
+/test_walkthrough_v2.py
