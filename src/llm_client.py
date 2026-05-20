@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
@@ -20,7 +21,7 @@ def _call_with_retry(func, *args, **kwargs):
 
 from openai import OpenAI
 
-from src.actions import AgentAction
+from src.actions import AgentAction, parse_strict_action, BaseAction
 
 
 class BaseVisionLLM(ABC):
@@ -46,12 +47,77 @@ class BaseVisionLLM(ABC):
         raise NotImplementedError
 
     @staticmethod
+    def _parse_action(data: dict) -> AgentAction:
+        """Централизованная валидация: сначала strict union, затем legacy fallback."""
+        try:
+            strict = parse_strict_action(data)
+            return AgentAction(**strict.model_dump())
+        except Exception:
+            # Fallback на legacy для backward compat
+            return AgentAction(**data)
+
+    @staticmethod
+    def _extract_json_object(raw: str) -> dict:
+        """Извлекает первый валидный JSON object из строки с балансировкой скобок.
+
+        Поддерживает:
+        - чистый JSON object;
+        - fenced JSON (```json ... ```);
+        - JSON object внутри pre/post текста;
+        - decoder fallback с понятной ошибкой.
+        """
+        if not raw or not isinstance(raw, str):
+            raise ValueError("LLM response is empty or not a string.")
+
+        text = raw.strip()
+
+        # Пробуем быстрый путь: вся строка — валидный JSON object
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        # Ищем fenced JSON
+        fence_pattern = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+        for match in fence_pattern.finditer(text):
+            candidate = match.group(1).strip()
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                continue
+
+        # Ищем JSON object через балансировку фигурных скобок
+        start = text.find("{")
+        if start == -1:
+            raise ValueError(f"No JSON object found in LLM response. Raw: {text[:500]}")
+
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth = 0
+                for j in range(i, len(text)):
+                    if text[j] == "{":
+                        depth += 1
+                    elif text[j] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            candidate = text[i:j + 1]
+                            try:
+                                parsed = json.loads(candidate)
+                                if isinstance(parsed, dict):
+                                    return parsed
+                            except json.JSONDecodeError:
+                                break
+        raise ValueError(f"No valid JSON object found in LLM response. Raw: {text[:500]}")
+
+    @staticmethod
     def _clean_json(raw: str) -> str:
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```", 2)[-1]
-            raw = raw.replace("json", "", 1).strip()
-        return raw
+        """Legacy alias — возвращает JSON-строку для обратной совместимости."""
+        obj = BaseVisionLLM._extract_json_object(raw)
+        return json.dumps(obj, ensure_ascii=False)
 
     @staticmethod
     def _extract_response_text(response) -> str:
@@ -133,7 +199,7 @@ class OpenAILLM(BaseVisionLLM):
         )
         raw = self._clean_json(self._extract_response_text(response) or "{}")
         data = json.loads(raw)
-        return AgentAction(**data)
+        return BaseVisionLLM._parse_action(data)
 
     def predict_text(
         self,
@@ -152,7 +218,7 @@ class OpenAILLM(BaseVisionLLM):
         )
         raw = self._clean_json(self._extract_response_text(response) or "{}")
         data = json.loads(raw)
-        return AgentAction(**data)
+        return BaseVisionLLM._parse_action(data)
 
 
 class OllamaLLM(BaseVisionLLM):
@@ -198,7 +264,7 @@ class OllamaLLM(BaseVisionLLM):
         )
         raw = self._clean_json(self._extract_response_text(response) or "{}")
         data = json.loads(raw)
-        return AgentAction(**data)
+        return BaseVisionLLM._parse_action(data)
 
     def predict_text(
         self,
@@ -217,7 +283,7 @@ class OllamaLLM(BaseVisionLLM):
         )
         raw = self._clean_json(self._extract_response_text(response) or "{}")
         data = json.loads(raw)
-        return AgentAction(**data)
+        return BaseVisionLLM._parse_action(data)
 
 
 class AnthropicLLM(BaseVisionLLM):
@@ -298,7 +364,7 @@ class AnthropicLLM(BaseVisionLLM):
             raw = self._clean_json(self._extract_response_text(response) or "{}")
 
         data = json.loads(raw)
-        return AgentAction(**data)
+        return BaseVisionLLM._parse_action(data)
 
     def predict_text(
         self,
@@ -332,7 +398,7 @@ class AnthropicLLM(BaseVisionLLM):
             )
             raw = self._clean_json(self._extract_response_text(response) or "{}")
         data = json.loads(raw)
-        return AgentAction(**data)
+        return BaseVisionLLM._parse_action(data)
 
 
 class KimiLLM(OpenAILLM):

@@ -1,4 +1,4 @@
-import { createApp, ref, computed, onMounted, watch } from 'vue';
+import { createApp, ref, computed, onMounted, watch, nextTick } from 'vue';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -32,7 +32,7 @@ const AgentPanel = {
         </div>
     `,
     setup() {
-        const task = ref('Войти в систему используя email k.tretyakov@slsoft.ru и пароль v_vP5GxCva, затем открыть раздел База знаний');
+        const task = ref('Войти в систему используя email user@example.invalid и пароль your_password_here, затем открыть раздел База знаний');
         const provider = ref('kimi-cli');
         const maxSteps = ref(15);
         const textMode = ref(true);
@@ -147,12 +147,22 @@ const FlowPanel = {
         const { fitView } = useVueFlow();
         const elements = ref([]);
         const panelRef = ref(null);
+        const edgeTypes = {};
 
         const currentSequence = computed(() => props.sequences.find(q => q.id === props.currentSequenceId) || null);
 
+        function cleanMarkers() {
+            setTimeout(() => {
+                document.querySelectorAll('.vue-flow__edge-path').forEach(el => {
+                    el.removeAttribute('marker-end');
+                    el.removeAttribute('marker-start');
+                });
+            }, 100);
+        }
+
         function rebuildElements() {
             const seq = currentSequence.value;
-            if (!seq) { elements.value = []; return; }
+            if (!seq) { elements.value = []; cleanMarkers(); return; }
             const ids = seq.scenario_ids || [];
             const existingPositions = {};
             elements.value.forEach(el => {
@@ -160,7 +170,7 @@ const FlowPanel = {
             });
             const nodes = ids.map((sid, i) => {
                 const s = props.scenarios.find(x => x.id === sid);
-                const pos = existingPositions[sid] || { x: i * 240, y: 40 };
+                const pos = existingPositions[sid] || { x: i * 240, y: 120 };
                 return {
                     id: sid,
                     type: 'scenario',
@@ -174,14 +184,14 @@ const FlowPanel = {
                     id: `e-${ids[i]}-${ids[i+1]}`,
                     source: ids[i],
                     target: ids[i+1],
-                    type: 'smoothstep',
-                    animated: true
+                    type: 'default'
                 });
             }
             elements.value = [...nodes, ...edges];
+            cleanMarkers();
         }
 
-        watch(() => props.currentSequenceId, () => { rebuildElements(); setTimeout(() => fitView(), 50); }, { immediate: true });
+        watch(() => props.currentSequenceId, () => { rebuildElements(); setTimeout(() => fitView({ padding: 0.2 }), 100); }, { immediate: true });
         watch(() => props.sequences, rebuildElements, { deep: true });
         watch(() => props.scenarios, rebuildElements, { deep: true });
 
@@ -210,9 +220,14 @@ const FlowPanel = {
         };
 
         onMounted(() => {
-            setTimeout(() => fitView(), 100);
+            cleanMarkers();
+            setTimeout(() => fitView({ padding: 0.2 }), 200);
             if (panelRef.value && typeof ResizeObserver !== 'undefined') {
-                const ro = new ResizeObserver(() => fitView());
+                const ro = new ResizeObserver(() => fitView({ padding: 0.2 }));
+                ro.observe(panelRef.value);
+            }
+            if (panelRef.value && typeof ResizeObserver !== 'undefined') {
+                // ResizeObserver disabled
                 ro.observe(panelRef.value);
             }
         });
@@ -255,7 +270,7 @@ const FlowPanel = {
             </div>
 
             <div class="flow-canvas" @drop="onDrop" @dragover="onDragOver">
-                <VueFlow v-model="elements" fit-view-on-init @node-drag-stop="onNodeDragStop">
+                <VueFlow v-model="elements" @node-drag-stop="onNodeDragStop">
                     <template #node-scenario="nodeProps">
                         <div class="scenario-node" @dblclick="$emit('edit-scenario', nodeProps.id)">
                             <div class="node-name">{{ nodeProps.data.name }}</div>
@@ -284,7 +299,7 @@ const FlowPanel = {
 createApp({
     components: { AgentPanel, StepModal, FlowPanel },
     setup() {
-        const url = ref('https://stagehelper.ai.slsoft.ru/');
+        const url = ref('https://example.test/');
         const screenshot = ref('');
         const elements = ref({});
         const status = ref('Загрузка...');
@@ -364,18 +379,51 @@ createApp({
             }
         };
 
+        const setErrorScreenshot = (message) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 360;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#c00';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠ Ошибка загрузки скриншота', canvas.width / 2, 160);
+            ctx.fillStyle = '#333';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(message, canvas.width / 2, 190);
+            screenshot.value = canvas.toDataURL('image/png');
+        };
+
         const refreshScreenshot = async () => {
-            const res = await apiPost('/screenshot_annotated', {});
-            setScreenshot('data:image/jpeg;base64,' + res.image);
-            elements.value = res.elements || {};
-            status.value = 'Обновлено: ' + new Date().toLocaleTimeString();
+            try {
+                const res = await apiPost('/screenshot_annotated', {});
+                if (!res.image) {
+                    throw new Error('Сервер вернул пустое изображение');
+                }
+                setScreenshot('data:image/jpeg;base64,' + res.image);
+                elements.value = res.elements || {};
+                status.value = '✅ Обновлено: ' + new Date().toLocaleTimeString();
+            } catch (e) {
+                console.error('screenshot error', e);
+                setErrorScreenshot(e.message || 'Не удалось получить скриншот');
+                status.value = '❌ Ошибка скриншота: ' + (e.message || 'unknown');
+            }
         };
 
         const navigate = async () => {
-            await apiPost('/navigate', { url: url.value });
-            await refreshScreenshot();
-            lastManualAction.value = { action_type: 'navigate', url: url.value };
-            await maybeAutoRecord();
+            try {
+                await apiPost('/navigate', { url: url.value });
+                status.value = '⏳ Загрузка страницы…';
+                await refreshScreenshot();
+                lastManualAction.value = { action_type: 'navigate', url: url.value };
+                await maybeAutoRecord();
+            } catch (e) {
+                console.error('navigate error', e);
+                status.value = '❌ Ошибка перехода: ' + (e.message || 'unknown');
+                setErrorScreenshot('Ошибка навигации: ' + (e.message || 'unknown'));
+            }
         };
 
         const enrichAction = (action) => {

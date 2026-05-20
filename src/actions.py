@@ -1,7 +1,163 @@
-from typing import Literal, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Literal, Optional, Union, Annotated
+from pydantic import BaseModel, Field, field_validator, TypeAdapter
 
 
+class BaseAction(BaseModel):
+    """Базовая модель для всех действий агента."""
+
+    reasoning: str = Field(
+        default="",
+        description="Краткое объяснение, почему выбрано это действие",
+    )
+
+
+class NavigateAction(BaseAction):
+    action_type: Literal["navigate"] = "navigate"
+    url: str = Field(description="URL для навигации")
+
+
+class ClickAction(BaseAction):
+    action_type: Literal["click"] = "click"
+    element_display_id: int = Field(description="ID пронумерованного элемента")
+    selector: Optional[str] = Field(default=None, description="CSS-like selector для fallback")
+    stable_hash: Optional[str] = Field(default=None, description="Стабильный хеш элемента для fallback")
+
+
+class TypeAction(BaseAction):
+    action_type: Literal["type"] = "type"
+    element_display_id: int = Field(description="ID пронумерованного элемента")
+    text: str = Field(description="Текст для ввода")
+    selector: Optional[str] = Field(default=None, description="CSS-like selector для fallback")
+    stable_hash: Optional[str] = Field(default=None, description="Стабильный хеш элемента для fallback")
+
+
+class ScrollAction(BaseAction):
+    action_type: Literal["scroll"] = "scroll"
+    direction: Literal["up", "down", "left", "right"] = Field(description="Направление скролла")
+    amount: int = Field(default=300, description="Количество пикселей для скролла")
+
+
+class HoverAction(BaseAction):
+    action_type: Literal["hover"] = "hover"
+    element_display_id: int = Field(description="ID пронумерованного элемента")
+    selector: Optional[str] = Field(default=None, description="CSS-like selector для fallback")
+    stable_hash: Optional[str] = Field(default=None, description="Стабильный хеш элемента для fallback")
+
+
+class PressKeyAction(BaseAction):
+    action_type: Literal["press_key"] = "press_key"
+    key: str = Field(description="Клавиша (Enter, Escape, Tab, ArrowDown, etc.)")
+
+
+class SelectOptionAction(BaseAction):
+    action_type: Literal["select_option"] = "select_option"
+    element_display_id: int = Field(description="ID пронумерованного элемента")
+    text: Optional[str] = Field(default=None, description="Текст опции")
+    option_value: Optional[str] = Field(default=None, description="Value опции")
+    selector: Optional[str] = Field(default=None, description="CSS-like selector для fallback")
+    stable_hash: Optional[str] = Field(default=None, description="Стабильный хеш элемента для fallback")
+
+
+class UploadFileAction(BaseAction):
+    action_type: Literal["upload_file"] = "upload_file"
+    element_display_id: int = Field(description="ID пронумерованного элемента")
+    file_path: str = Field(description="Путь к файлу для загрузки")
+    selector: Optional[str] = Field(default=None, description="CSS-like selector для fallback")
+    stable_hash: Optional[str] = Field(default=None, description="Стабильный хеш элемента для fallback")
+
+    @field_validator("file_path")
+    @classmethod
+    def _validate_path(cls, v: str) -> str:
+        if ".." in v:
+            raise ValueError('Path cannot contain ".."')
+        if v.startswith("/") or v.startswith("\\") or (len(v) >= 2 and v[1] == ":"):
+            raise ValueError("Absolute paths are not allowed")
+        return v
+
+
+class SwitchTabAction(BaseAction):
+    action_type: Literal["switch_tab"] = "switch_tab"
+    tab_index: int = Field(description="Индекс вкладки")
+
+
+class DismissAlertAction(BaseAction):
+    action_type: Literal["dismiss_alert"] = "dismiss_alert"
+
+
+class AcceptAlertAction(BaseAction):
+    action_type: Literal["accept_alert"] = "accept_alert"
+
+
+class RightClickAction(BaseAction):
+    action_type: Literal["right_click"] = "right_click"
+    element_display_id: int = Field(description="ID пронумерованного элемента")
+    selector: Optional[str] = Field(default=None, description="CSS-like selector для fallback")
+    stable_hash: Optional[str] = Field(default=None, description="Стабильный хеш элемента для fallback")
+
+
+class ScreenshotAction(BaseAction):
+    action_type: Literal["screenshot"] = "screenshot"
+    filename: Optional[str] = Field(default=None, description="Имя файла для скриншота")
+
+    @field_validator("filename")
+    @classmethod
+    def _validate_filename(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if ".." in v:
+            raise ValueError('Filename cannot contain ".."')
+        if v.startswith("/") or v.startswith("\\") or (len(v) >= 2 and v[1] == ":"):
+            raise ValueError("Absolute paths are not allowed")
+        return v
+
+
+class WaitAction(BaseAction):
+    action_type: Literal["wait"] = "wait"
+    seconds: int = Field(default=2, description="Секунды ожидания")
+
+
+class FinishAction(BaseAction):
+    action_type: Literal["finish"] = "finish"
+    summary: Optional[str] = Field(default=None, description="Итоговый ответ")
+
+
+class FailAction(BaseAction):
+    action_type: Literal["fail"] = "fail"
+    reason: Optional[str] = Field(default=None, description="Причина неудачи")
+
+
+# Discriminated union для строгой валидации
+StrictAgentAction = Annotated[
+    Union[
+        NavigateAction,
+        ClickAction,
+        TypeAction,
+        ScrollAction,
+        HoverAction,
+        PressKeyAction,
+        SelectOptionAction,
+        UploadFileAction,
+        SwitchTabAction,
+        DismissAlertAction,
+        AcceptAlertAction,
+        RightClickAction,
+        ScreenshotAction,
+        WaitAction,
+        FinishAction,
+        FailAction,
+    ],
+    Field(discriminator="action_type"),
+]
+
+_strict_action_adapter = TypeAdapter(StrictAgentAction)
+
+
+def parse_strict_action(data: dict) -> BaseAction:
+    """Строгая валидация действия через discriminated union."""
+    return _strict_action_adapter.validate_python(data)
+
+
+# Legacy AgentAction — сохраняем для обратной совместимости
 class AgentAction(BaseModel):
     action_type: Literal[
         "navigate",

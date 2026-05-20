@@ -27,7 +27,7 @@
 ### 1. Клонирование и переход в папку
 
 ```bash
-cd E:\Agent_test\skreenmaker
+cd skreenmaker
 ```
 
 ### 2. Виртуальное окружение (рекомендуется)
@@ -59,30 +59,22 @@ python -m playwright install chromium
 Требуется Node.js 18+.
 
 ```bash
-cd .tmp-build
 npm install
-npx vite build
-cd ..
+npm run build
 ```
 
-После сборки в `static/dist/` появятся `app.mjs` и `app.css`.
+После сборки в `static/dist/` появятся `app.mjs`, `app.css` и `vue-flow.css`.
 
 ### 6. Конфигурация (опционально)
 
 Для автономного режима требуется API-ключ. Создайте файл `.env` в корне проекта:
 
-```env
-# OpenAI
-OPENAI_API_KEY=sk-...
-
-# Или Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Или Ollama (локально)
-OLLAMA_HOST=http://localhost:11434
+```bash
+cp .env.example .env
+# Отредактируй .env, добавив API-ключи и настройки провайдера
 ```
 
-Также можно использовать `config.yaml` (см. `config.yaml.example`).
+Также можно использовать `config.yaml` (см. `config.yaml.example`) или установить пакет через `pip install -e .`.
 
 ---
 
@@ -202,6 +194,19 @@ uvicorn src.server:app --host 0.0.0.0 --port 8000
 - `max_steps`: максимальное число шагов (default 15)
 
 ---
+
+## Docker
+
+```bash
+# Сборка образа
+docker build -t skreenmaker .
+
+# Запуск API-сервера
+docker run -p 8000:8000 --env-file .env skreenmaker
+
+# Запуск Web TUI
+docker run -p 8080:8080 --env-file .env skreenmaker python -m src.interactive_tui --host 0.0.0.0 --port 8080
+```
 
 ## Тестирование
 

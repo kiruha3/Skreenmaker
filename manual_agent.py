@@ -21,12 +21,12 @@ async def main():
         # Восстанавливаем состояние если есть
         if STATE_FILE.exists():
             state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-            current_url = state.get("url", "https://stagehelper.ai.slsoft.ru/")
+            current_url = state.get("url", "https://example.test/")
             await browser.navigate(current_url)
             print(f"Resumed at {current_url}")
         else:
-            await browser.navigate("https://stagehelper.ai.slsoft.ru/")
-            print("Navigated to https://stagehelper.ai.slsoft.ru/")
+            await browser.navigate("https://example.test/")
+            print("Navigated to https://example.test/")
 
         # Делаем скриншот и overlay
         await browser.screenshot(str(SCREENSHOT_PATH))

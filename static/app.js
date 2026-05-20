@@ -32,7 +32,7 @@ const AgentPanel = {
         </div>
     `,
     setup() {
-        const task = ref('Войти в систему используя email k.tretyakov@slsoft.ru и пароль v_vP5GxCva, затем открыть раздел База знаний');
+        const task = ref('Войти в систему используя email user@example.invalid и пароль your_password_here, затем открыть раздел База знаний');
         const provider = ref('kimi-cli');
         const maxSteps = ref(15);
         const textMode = ref(true);
@@ -299,7 +299,7 @@ const FlowPanel = {
 createApp({
     components: { AgentPanel, StepModal, FlowPanel },
     setup() {
-        const url = ref('https://stagehelper.ai.slsoft.ru/');
+        const url = ref('https://example.test/');
         const screenshot = ref('');
         const elements = ref({});
         const status = ref('Загрузка...');
