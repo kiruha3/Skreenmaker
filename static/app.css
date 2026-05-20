@@ -127,7 +127,7 @@ h1 { font-size: 20px; margin-bottom: 12px; }
 .flow-sidebar { width: 280px; min-width: 280px; display: flex; flex-direction: column; overflow-y: auto; }
 .flow-sidebar .seq-list { flex: 0 0 auto; max-height: 200px; }
 .flow-sidebar .palette-list { flex: 1 1 auto; min-height: 120px; }
-.flow-canvas { flex: 1; min-width: 0; min-height: 0; border: 1px solid #ddd; border-radius: 8px; background: #fff; overflow: hidden; }
+.flow-canvas { flex: 1; min-width: 0; min-height: 420px; border: 1px solid #ddd; border-radius: 8px; background: #fff; overflow: hidden; }
 .flow-canvas .vue-flow { height: 100%; }
 .vue-flow__node {
     position: absolute;
@@ -161,4 +161,22 @@ h1 { font-size: 20px; margin-bottom: 12px; }
 .vue-flow__edge-path {
     stroke: #555 !important;
     stroke-width: 2px !important;
+    fill: none !important;
+}
+
+.vue-flow__viewport {
+    position: relative;
+    height: 100%;
+}
+.vue-flow__transformationpane {
+    position: absolute;
+    inset: 0;
+}
+.vue-flow__nodes,
+.vue-flow__edge-labels,
+.vue-flow__edges {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
 }

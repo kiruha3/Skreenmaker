@@ -1,5 +1,5 @@
 import { createApp, ref, computed, onMounted, watch, nextTick } from 'vue';
-import { VueFlow, useVueFlow, SmoothStepEdge } from '@vue-flow/core';
+import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
@@ -147,13 +147,22 @@ const FlowPanel = {
         const { fitView } = useVueFlow();
         const elements = ref([]);
         const panelRef = ref(null);
-        const edgeTypes = { smoothstep: SmoothStepEdge };
+        const edgeTypes = {};
 
         const currentSequence = computed(() => props.sequences.find(q => q.id === props.currentSequenceId) || null);
 
+        function cleanMarkers() {
+            setTimeout(() => {
+                document.querySelectorAll('.vue-flow__edge-path').forEach(el => {
+                    el.removeAttribute('marker-end');
+                    el.removeAttribute('marker-start');
+                });
+            }, 100);
+        }
+
         function rebuildElements() {
             const seq = currentSequence.value;
-            if (!seq) { elements.value = []; return; }
+            if (!seq) { elements.value = []; cleanMarkers(); return; }
             const ids = seq.scenario_ids || [];
             const existingPositions = {};
             elements.value.forEach(el => {
@@ -175,14 +184,14 @@ const FlowPanel = {
                     id: `e-${ids[i]}-${ids[i+1]}`,
                     source: ids[i],
                     target: ids[i+1],
-                    type: 'smoothstep',
-                    animated: true
+                    type: 'default'
                 });
             }
             elements.value = [...nodes, ...edges];
+            cleanMarkers();
         }
 
-        watch(() => props.currentSequenceId, () => { rebuildElements(); nextTick(() => setTimeout(() => fitView({ padding: 0.3 }), 150)); }, { immediate: true });
+        watch(() => props.currentSequenceId, () => { rebuildElements(); setTimeout(() => fitView({ padding: 0.2 }), 100); }, { immediate: true });
         watch(() => props.sequences, rebuildElements, { deep: true });
         watch(() => props.scenarios, rebuildElements, { deep: true });
 
@@ -211,9 +220,14 @@ const FlowPanel = {
         };
 
         onMounted(() => {
-            nextTick(() => setTimeout(() => fitView({ padding: 0.3 }), 200));
+            cleanMarkers();
+            setTimeout(() => fitView({ padding: 0.2 }), 200);
             if (panelRef.value && typeof ResizeObserver !== 'undefined') {
-                const ro = new ResizeObserver(() => fitView({ padding: 0.3 }));
+                const ro = new ResizeObserver(() => fitView({ padding: 0.2 }));
+                ro.observe(panelRef.value);
+            }
+            if (panelRef.value && typeof ResizeObserver !== 'undefined') {
+                // ResizeObserver disabled
                 ro.observe(panelRef.value);
             }
         });
@@ -256,7 +270,7 @@ const FlowPanel = {
             </div>
 
             <div class="flow-canvas" @drop="onDrop" @dragover="onDragOver">
-                <VueFlow v-model="elements" fit-view-on-init @node-drag-stop="onNodeDragStop">
+                <VueFlow v-model="elements" @node-drag-stop="onNodeDragStop">
                     <template #node-scenario="nodeProps">
                         <div class="scenario-node" @dblclick="$emit('edit-scenario', nodeProps.id)">
                             <div class="node-name">{{ nodeProps.data.name }}</div>

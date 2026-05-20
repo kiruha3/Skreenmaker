@@ -37,7 +37,7 @@ output/
 
 # Temporary folders
 .tmp/
-
+*.png
 # Node
 node_modules/
 

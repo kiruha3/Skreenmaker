@@ -2,7 +2,7 @@
   "name": "skreenmaker",
   "version": "1.0.0",
   "scripts": {
-    "build": "vite build && node -e \"require('fs').copyFileSync('static/app.css', 'static/dist/app.css')\"",
+    "build": "vite build && node -e \"const fs=require('fs'); fs.copyFileSync('static/app.css','static/dist/app.css'); fs.writeFileSync('static/dist/vue-flow.css', fs.readFileSync('node_modules/@vue-flow/core/dist/style.css','utf8')+'\\n'+fs.readFileSync('node_modules/@vue-flow/core/dist/theme-default.css','utf8'));\"",
     "start": "python -m src.server",
     "dev": "uvicorn src.server:app --host 0.0.0.0 --port 8080 --reload",
     "server": "python -m src.server",
