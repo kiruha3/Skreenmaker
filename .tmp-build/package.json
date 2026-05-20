@@ -1,6 +1,9 @@
 {
   "name": "skreenmaker-build",
   "version": "1.0.0",
+  "scripts": {
+    "build": "cp ../static/app.js main.js && npx vite build && cp ../static/app.css ../static/dist/app.css"
+  },
   "dependencies": {
     "@vue-flow/background": "1.3.2",
     "@vue-flow/controls": "1.1.2",

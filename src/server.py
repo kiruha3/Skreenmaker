@@ -290,3 +290,8 @@ async def close():
 async def shutdown_event():
     sess = get_session()
     await sess.close()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("src.tui_web:app", host="0.0.0.0", port=8080, reload=False)

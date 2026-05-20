@@ -1,5 +1,5 @@
-import { createApp, ref, computed, onMounted, watch } from 'vue';
-import { VueFlow, useVueFlow } from '@vue-flow/core';
+import { createApp, ref, computed, onMounted, watch, nextTick } from 'vue';
+import { VueFlow, useVueFlow, SmoothStepEdge } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
@@ -147,6 +147,7 @@ const FlowPanel = {
         const { fitView } = useVueFlow();
         const elements = ref([]);
         const panelRef = ref(null);
+        const edgeTypes = { smoothstep: SmoothStepEdge };
 
         const currentSequence = computed(() => props.sequences.find(q => q.id === props.currentSequenceId) || null);
 
@@ -160,7 +161,7 @@ const FlowPanel = {
             });
             const nodes = ids.map((sid, i) => {
                 const s = props.scenarios.find(x => x.id === sid);
-                const pos = existingPositions[sid] || { x: i * 240, y: 40 };
+                const pos = existingPositions[sid] || { x: i * 240, y: 120 };
                 return {
                     id: sid,
                     type: 'scenario',
@@ -181,7 +182,7 @@ const FlowPanel = {
             elements.value = [...nodes, ...edges];
         }
 
-        watch(() => props.currentSequenceId, () => { rebuildElements(); setTimeout(() => fitView(), 50); }, { immediate: true });
+        watch(() => props.currentSequenceId, () => { rebuildElements(); nextTick(() => setTimeout(() => fitView({ padding: 0.3 }), 150)); }, { immediate: true });
         watch(() => props.sequences, rebuildElements, { deep: true });
         watch(() => props.scenarios, rebuildElements, { deep: true });
 
@@ -210,9 +211,9 @@ const FlowPanel = {
         };
 
         onMounted(() => {
-            setTimeout(() => fitView(), 100);
+            nextTick(() => setTimeout(() => fitView({ padding: 0.3 }), 200));
             if (panelRef.value && typeof ResizeObserver !== 'undefined') {
-                const ro = new ResizeObserver(() => fitView());
+                const ro = new ResizeObserver(() => fitView({ padding: 0.3 }));
                 ro.observe(panelRef.value);
             }
         });
@@ -293,20 +294,7 @@ createApp({
         const lastElementDisplayId = ref(null);
         const lastManualAction = ref(null);
 
-        // Screenshot zoom
-        const zoom = ref(1);
-        const imgNaturalWidth = ref(0);
-        const imgNaturalHeight = ref(0);
-        const onImgLoad = (e) => {
-            imgNaturalWidth.value = e.target.naturalWidth;
-            imgNaturalHeight.value = e.target.naturalHeight;
-        };
-        const setFitZoom = () => {
-            const viewport = document.querySelector('.screenshot-viewport');
-            if (viewport && imgNaturalWidth.value) {
-                zoom.value = Math.min(1, viewport.clientWidth / imgNaturalWidth.value);
-            }
-        };
+
 
         // Scenario state
         const scenarios = ref([]);
@@ -899,7 +887,6 @@ createApp({
             autoRecordEnabled, replayDelay, replayRunning, stepHighlights,
             modalVisible, modalEditIndex, modalInitial,
             agentRunning, lastManualAction,
-            zoom, imgNaturalWidth, imgNaturalHeight,
             navigate, sendAction, takeScreenshot, typeText, refreshScreenshot, switchTab,
             createScenario, selectScenario, renameScenario, deleteScenario,
             addTag, removeTag, setGroup,
@@ -910,7 +897,7 @@ createApp({
             addScenarioToSequence, removeScenarioFromSequence, reorderSequence,
             startSequenceReplay, stopSequenceReplay,
             startAgent, stopAgent, takeStepScreenshot,
-            onImgLoad, setFitZoom, escapeHtml
+            escapeHtml
         };
     },
     template: `
@@ -927,47 +914,8 @@ createApp({
                 <div class="main-inner-grid">
                     <div class="left-col">
                         <div class="panel screenshot-wrap">
-                            <div class="screenshot-viewport">
-                                <div class="zoom-layer"
-                                     :style="{
-                                         width: (imgNaturalWidth * zoom) + 'px',
-                                         height: (imgNaturalHeight * zoom) + 'px'
-                                     }">
-                                    <img :src="screenshot"
-                                         @load="onImgLoad"
-                                         :style="{ transform: 'scale(' + zoom + ')', transformOrigin: 'top left', width: '100%', height: '100%', display: 'block' }"
-                                         alt="Annotated screenshot">
-                                </div>
-                            </div>
-                            <div class="zoom-bar">
-                                <button class="secondary" @click="setFitZoom">Fit</button>
-                                <input type="range" min="0.25" max="2" step="0.05" v-model.number="zoom">
-                                <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
-                                <button class="secondary" @click="zoom = 1">100%</button>
-                            </div>
+                            <img :src="screenshot" alt="Annotated screenshot">
                             <div class="status">{{ status }}</div>
-                        </div>
-                        <div class="panel flow-panel-wrap">
-                            <flow-panel
-                                :scenarios="scenarios"
-                                :sequences="sequences"
-                                :current-sequence-id="currentSequenceId"
-                                :sequence-replay-delay="sequenceReplayDelay"
-                                :sequence-inter-delay="sequenceInterDelay"
-                                :sequence-replay-running="sequenceReplayRunning"
-
-                                @select-sequence="selectSequence"
-                                @create-sequence="createSequence"
-                                @rename-sequence="renameSequence"
-                                @delete-sequence="deleteSequence"
-                                @add-scenario="addScenarioToSequence"
-                                @remove-scenario="removeScenarioFromSequence"
-                                @move-scenario="(sid, dir) => { const seq = currentSequence; if (!seq) return; const idx = seq.scenario_ids.indexOf(sid); if (idx >= 0) moveSeqScenario(idx, dir); }"
-                                @reorder-sequence="reorderSequence"
-                                @replay="startSequenceReplay"
-                                @stop-replay="stopSequenceReplay"
-                                @edit-scenario="(sid) => { selectScenario(sid); switchTab('manual'); }"
-                            ></flow-panel>
                         </div>
                         <div class="panel steps-panel">
                             <div class="section-title">{{ currentScenario ? 'Шаги: ' + currentScenario.name : 'Шаги' }}</div>
@@ -998,6 +946,28 @@ createApp({
                                 <label>Delay between steps:</label>
                                 <input type="number" v-model.number="replayDelay" min="0" step="0.1" style="width:60px; padding:4px;"> s
                             </div>
+                        </div>
+                        <div class="panel flow-panel-wrap">
+                            <flow-panel
+                                :scenarios="scenarios"
+                                :sequences="sequences"
+                                :current-sequence-id="currentSequenceId"
+                                :sequence-replay-delay="sequenceReplayDelay"
+                                :sequence-inter-delay="sequenceInterDelay"
+                                :sequence-replay-running="sequenceReplayRunning"
+
+                                @select-sequence="selectSequence"
+                                @create-sequence="createSequence"
+                                @rename-sequence="renameSequence"
+                                @delete-sequence="deleteSequence"
+                                @add-scenario="addScenarioToSequence"
+                                @remove-scenario="removeScenarioFromSequence"
+                                @move-scenario="(sid, dir) => { const seq = currentSequence; if (!seq) return; const idx = seq.scenario_ids.indexOf(sid); if (idx >= 0) moveSeqScenario(idx, dir); }"
+                                @reorder-sequence="reorderSequence"
+                                @replay="startSequenceReplay"
+                                @stop-replay="stopSequenceReplay"
+                                @edit-scenario="(sid) => { selectScenario(sid); switchTab('manual'); }"
+                            ></flow-panel>
                         </div>
                     </div>
                     <div class="right-col">

@@ -227,8 +227,6 @@ class BrowserController:
             }
             const el = visible[idx - 1];
             if (!el) return false;
-            el.scrollIntoView({block: 'center', inline: 'center'});
-            el.focus();
             el.click();
             return true;
         }
@@ -259,7 +257,6 @@ class BrowserController:
             }
             const el = visible[idx - 1];
             if (!el) return false;
-            el.scrollIntoView({block: 'center', inline: 'center'});
             el.focus();
             return true;
         }

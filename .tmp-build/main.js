@@ -3,10 +3,6 @@ import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
-import '@vue-flow/core/dist/style.css';
-import '@vue-flow/core/dist/theme-default.css';
-import '@vue-flow/controls/dist/style.css';
-import '@vue-flow/minimap/dist/style.css';
 
 const AgentPanel = {
     props: ['running'],
@@ -296,6 +292,8 @@ createApp({
         const autoRefreshInterval = ref(null);
         const lastElementDisplayId = ref(null);
         const lastManualAction = ref(null);
+
+
 
         // Scenario state
         const scenarios = ref([]);
@@ -918,28 +916,6 @@ createApp({
                             <img :src="screenshot" alt="Annotated screenshot">
                             <div class="status">{{ status }}</div>
                         </div>
-                        <div class="panel flow-panel-wrap">
-                            <flow-panel
-                                :scenarios="scenarios"
-                                :sequences="sequences"
-                                :current-sequence-id="currentSequenceId"
-                                :sequence-replay-delay="sequenceReplayDelay"
-                                :sequence-inter-delay="sequenceInterDelay"
-                                :sequence-replay-running="sequenceReplayRunning"
-
-                                @select-sequence="selectSequence"
-                                @create-sequence="createSequence"
-                                @rename-sequence="renameSequence"
-                                @delete-sequence="deleteSequence"
-                                @add-scenario="addScenarioToSequence"
-                                @remove-scenario="removeScenarioFromSequence"
-                                @move-scenario="(sid, dir) => { const seq = currentSequence; if (!seq) return; const idx = seq.scenario_ids.indexOf(sid); if (idx >= 0) moveSeqScenario(idx, dir); }"
-                                @reorder-sequence="reorderSequence"
-                                @replay="startSequenceReplay"
-                                @stop-replay="stopSequenceReplay"
-                                @edit-scenario="(sid) => { selectScenario(sid); switchTab('manual'); }"
-                            ></flow-panel>
-                        </div>
                         <div class="panel steps-panel">
                             <div class="section-title">{{ currentScenario ? 'Шаги: ' + currentScenario.name : 'Шаги' }}</div>
                             <div class="step-list">
@@ -969,6 +945,28 @@ createApp({
                                 <label>Delay between steps:</label>
                                 <input type="number" v-model.number="replayDelay" min="0" step="0.1" style="width:60px; padding:4px;"> s
                             </div>
+                        </div>
+                        <div class="panel flow-panel-wrap">
+                            <flow-panel
+                                :scenarios="scenarios"
+                                :sequences="sequences"
+                                :current-sequence-id="currentSequenceId"
+                                :sequence-replay-delay="sequenceReplayDelay"
+                                :sequence-inter-delay="sequenceInterDelay"
+                                :sequence-replay-running="sequenceReplayRunning"
+
+                                @select-sequence="selectSequence"
+                                @create-sequence="createSequence"
+                                @rename-sequence="renameSequence"
+                                @delete-sequence="deleteSequence"
+                                @add-scenario="addScenarioToSequence"
+                                @remove-scenario="removeScenarioFromSequence"
+                                @move-scenario="(sid, dir) => { const seq = currentSequence; if (!seq) return; const idx = seq.scenario_ids.indexOf(sid); if (idx >= 0) moveSeqScenario(idx, dir); }"
+                                @reorder-sequence="reorderSequence"
+                                @replay="startSequenceReplay"
+                                @stop-replay="stopSequenceReplay"
+                                @edit-scenario="(sid) => { selectScenario(sid); switchTab('manual'); }"
+                            ></flow-panel>
                         </div>
                     </div>
                     <div class="right-col">
