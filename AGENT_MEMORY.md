@@ -36,9 +36,10 @@
 - **Screenshot source**: Use `/screenshot` (clean) + `/elements` (data) instead of `/screenshot_annotated`
 - **Variable interpolation**: Resolves all string fields in scenario steps via `resolve_step()`
 - **Assert in replay**: Fails immediately, reports error via WebSocket, UI shows `step-assert-fail` highlight
+- **Race condition guard**: `isRefreshingScreenshot` ref prevents parallel `refreshScreenshot` calls; `sendAction`/`navigate` pause auto-refresh during execution to avoid overlay flicker on SPA pages
 
 ### Known Issues
 - Port 8080 conflicts: old python.exe processes may hold port — use `taskkill /F /IM python.exe` before restart
 
 ### Test Count
-- Total: 90+ tests passing (21 new: 7 variable + 8 assert + 6 UI integration)
+- Total: 90+ tests passing (32 new: 7 variable + 8 assert + 6 UI + 11 browser)

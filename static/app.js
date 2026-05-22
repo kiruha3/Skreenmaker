@@ -326,6 +326,7 @@ createApp({
         const status = ref('Загрузка...');
         const activeTab = ref('manual');
         const autoRefreshInterval = ref(null);
+        const isRefreshingScreenshot = ref(false);
         const lastElementDisplayId = ref(null);
         const lastManualAction = ref(null);
 
@@ -432,6 +433,8 @@ createApp({
         };
 
         const refreshScreenshot = async () => {
+            if (isRefreshingScreenshot.value) return;
+            isRefreshingScreenshot.value = true;
             try {
                 // Загружаем чистый скриншот (без Python overlay) + элементы отдельно
                 const [shotRes, elementsRes] = await Promise.all([
@@ -460,10 +463,14 @@ createApp({
                 console.error('screenshot error', e);
                 setErrorScreenshot(e.message || 'Не удалось получить скриншот');
                 status.value = '❌ Ошибка скриншота: ' + (e.message || 'unknown');
+            } finally {
+                isRefreshingScreenshot.value = false;
             }
         };
 
         const navigate = async () => {
+            const wasAutoRefreshing = autoRefreshInterval.value !== null;
+            stopAutoRefresh();
             try {
                 await apiPost('/navigate', { url: url.value });
                 status.value = '⏳ Загрузка страницы…';
@@ -474,6 +481,10 @@ createApp({
                 console.error('navigate error', e);
                 status.value = '❌ Ошибка перехода: ' + (e.message || 'unknown');
                 setErrorScreenshot('Ошибка навигации: ' + (e.message || 'unknown'));
+            } finally {
+                if (wasAutoRefreshing && activeTab.value === 'manual') {
+                    startAutoRefresh();
+                }
             }
         };
 
@@ -487,11 +498,20 @@ createApp({
         const sendAction = async (action) => {
             if (action.element_display_id !== undefined) lastElementDisplayId.value = action.element_display_id;
             const enriched = enrichAction({ ...action });
-            const result = await apiPost('/act', { action: enriched });
-            status.value = result.observation || result.status;
-            await refreshScreenshot();
-            lastManualAction.value = enriched;
-            await maybeAutoRecord();
+            // Pause auto-refresh during action to avoid race condition with screenshot updates
+            const wasAutoRefreshing = autoRefreshInterval.value !== null;
+            stopAutoRefresh();
+            try {
+                const result = await apiPost('/act', { action: enriched });
+                status.value = result.observation || result.status;
+                await refreshScreenshot();
+                lastManualAction.value = enriched;
+                await maybeAutoRecord();
+            } finally {
+                if (wasAutoRefreshing && activeTab.value === 'manual') {
+                    startAutoRefresh();
+                }
+            }
         };
 
         const takeScreenshot = async () => {
