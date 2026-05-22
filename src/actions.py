@@ -192,6 +192,7 @@ class AgentAction(BaseModel):
         "right_click",
         "screenshot",
         "wait",
+        "assert",
         "finish",
         "fail",
     ] = Field(description="Тип действия, которое агент хочет выполнить")
@@ -248,6 +249,16 @@ class AgentAction(BaseModel):
         if v.startswith("/") or v.startswith("\\") or (len(v) >= 2 and v[1] == ":"):
             raise ValueError("Absolute paths are not allowed")
         return v
+
+    assert_condition: Optional[str] = Field(
+        default=None,
+        description="Условие assert: url_contains('/path'), element_exists('#id'), text_contains('str'), title_is('Title')",
+    )
+
+    assert_expected: Optional[str] = Field(
+        default=None,
+        description="Ожидаемое значение для assert (опционально)",
+    )
 
     tab_index: Optional[int] = Field(
         default=None,

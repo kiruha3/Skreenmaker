@@ -164,6 +164,17 @@ class GroupSet(BaseModel):
     group: Optional[str] = None
 
 
+class ScenarioVariable(BaseModel):
+    name: str
+    default_value: str = ""
+    description: str = ""
+
+
+class VariablesUpdate(BaseModel):
+    scenario_id: str
+    variables: List[ScenarioVariable]
+
+
 # ---------- Routes ----------
 
 @app.get("/", response_class=HTMLResponse)
@@ -268,6 +279,43 @@ async def scenario_group_set(req: GroupSet):
     s["group"] = req.group.strip() if req.group else None
     _save_scenarios()
     return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/variables/set")
+async def scenario_variables_set(req: VariablesUpdate):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    s["variables"] = [v.model_dump() for v in req.variables]
+    _save_scenarios()
+    return {"status": "ok", "scenario": s}
+
+
+@app.post("/scenario/variables/get")
+async def scenario_variables_get(req: ScenarioSelect):
+    s = _scenarios.get(req.scenario_id)
+    if not s:
+        return {"status": "error", "message": "Scenario not found"}
+    return {"status": "ok", "variables": s.get("variables", [])}
+
+
+@app.post("/elements_with_bboxes")
+async def elements_with_bboxes():
+    session = get_session()
+    if not session or not session.controller or not session.controller._page:
+        return {"status": "error", "message": "No active browser session"}
+    try:
+        elements_list, elements_map = await session.controller.get_interactive_elements()
+        result = {}
+        for el in elements_list:
+            result[str(el.display_id)] = {
+                "tag": el.tag,
+                "text": el.text[:30] if el.text else "",
+                "bbox": [round(el.x, 1), round(el.y, 1), round(el.width, 1), round(el.height, 1)],
+            }
+        return {"status": "ok", "elements": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 # ---- Steps ----
@@ -525,6 +573,14 @@ async def replay_websocket(websocket: WebSocket):
             return
         sess = get_session()
         steps = s["steps"]
+        # Интерполяция переменных сценария
+        from src.variable_resolver import resolve_steps
+        variables = {v["name"]: v.get("default_value", "") for v in s.get("variables", [])}
+        # Переопределение значений из UI (если пришли)
+        override_values = msg.get("variable_values", {})
+        if override_values:
+            variables.update(override_values)
+        steps = resolve_steps(steps, variables)
         success = True
         delay = float(msg.get("delay", 0.5))
         for i, step in enumerate(steps):
@@ -538,6 +594,20 @@ async def replay_websocket(websocket: WebSocket):
                 success = False
                 await websocket.send_json({"type": "finish", "success": False, "stopped_at": i})
                 break
+            # Специальная обработка assert-шагов
+            if step.get("action_type") == "assert":
+                assert_result = result.get("assert_result", {})
+                await websocket.send_json({
+                    "type": "step_result",
+                    "index": i,
+                    "result": result,
+                    "assert": assert_result,
+                })
+                if not assert_result.get("passed"):
+                    success = False
+                    await websocket.send_json({"type": "finish", "success": False, "stopped_at": i})
+                    break
+                continue
             try:
                 shot = await sess.screenshot_annotated_base64()
             except Exception:
@@ -597,6 +667,10 @@ async def replay_sequence_websocket(websocket: WebSocket):
                 await websocket.send_json({"type": "scenario_result", "scenario_index": sc_idx, "scenario_id": sid, "skipped": True, "error": "Scenario not found"})
                 continue
             steps = s["steps"]
+            # Интерполяция переменных сценария в последовательности
+            from src.variable_resolver import resolve_steps
+            variables = {v["name"]: v.get("default_value", "") for v in s.get("variables", [])}
+            steps = resolve_steps(steps, variables)
             await websocket.send_json({"type": "scenario_start", "scenario_index": sc_idx, "scenario_id": sid, "name": s["name"], "total_steps": len(steps)})
             scenario_success = True
             for i, step in enumerate(steps):
@@ -611,6 +685,22 @@ async def replay_sequence_websocket(websocket: WebSocket):
                     overall_success = False
                     await websocket.send_json({"type": "scenario_result", "scenario_index": sc_idx, "scenario_id": sid, "success": False, "stopped_at": i})
                     break
+                # Специальная обработка assert-шагов
+                if step.get("action_type") == "assert":
+                    assert_result = result.get("assert_result", {})
+                    await websocket.send_json({
+                        "type": "step_result",
+                        "scenario_index": sc_idx,
+                        "step_index": i,
+                        "result": result,
+                        "assert": assert_result,
+                    })
+                    if not assert_result.get("passed"):
+                        scenario_success = False
+                        overall_success = False
+                        await websocket.send_json({"type": "scenario_result", "scenario_index": sc_idx, "scenario_id": sid, "success": False, "stopped_at": i})
+                        break
+                    continue
                 try:
                     shot = await sess.screenshot_annotated_base64()
                 except Exception:

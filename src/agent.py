@@ -435,4 +435,10 @@ class BrowserAgent:
         if action.action_type == "fail":
             return f"Task failed: {action.reason}"
 
+        if action.action_type == "assert":
+            from src.assert_engine import evaluate_assert
+            result = await evaluate_assert(self.browser._page, action.assert_condition or "", action.assert_expected)
+            status = "PASS" if result.passed else "FAIL"
+            return f"Assert {status}: {result.message}"
+
         return f"Unknown action: {action.action_type}"

@@ -440,6 +440,12 @@ class BrowserController:
         await self._page.keyboard.type(text)
         await smart_wait(self._page, "type")
 
+    async def execute_assert(self, condition: str, expected: str = None) -> dict:
+        """Выполняет assert-условие на текущей странице."""
+        from src.assert_engine import evaluate_assert
+        result = await evaluate_assert(self._page, condition, expected)
+        return result.to_dict()
+
     async def close(self):
         try:
             if self._browser and self._browser.is_connected():

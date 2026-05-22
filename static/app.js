@@ -51,12 +51,15 @@ const StepModal = {
         const url = ref('');
         const direction = ref('down');
         const seconds = ref(1);
+        const assertCondition = ref('');
+        const assertExpected = ref('');
         const showElement = computed(() => ['click','type','hover'].includes(type.value));
         const showText = computed(() => type.value === 'type');
         const showKey = computed(() => type.value === 'press_key');
         const showUrl = computed(() => type.value === 'navigate');
         const showDirection = computed(() => type.value === 'scroll');
         const showSeconds = computed(() => type.value === 'wait');
+        const showAssert = computed(() => type.value === 'assert');
 
         const reset = (step) => {
             type.value = step.action_type || 'click';
@@ -66,6 +69,8 @@ const StepModal = {
             url.value = step.url || '';
             direction.value = step.direction || 'down';
             seconds.value = step.seconds != null ? step.seconds : 1;
+            assertCondition.value = step.assert_condition || '';
+            assertExpected.value = step.assert_expected || '';
         };
 
         const save = () => {
@@ -79,10 +84,14 @@ const StepModal = {
             if (showUrl.value) action.url = url.value;
             if (showDirection.value) action.direction = direction.value;
             if (showSeconds.value) action.seconds = parseInt(seconds.value || '0');
+            if (showAssert.value) {
+                action.assert_condition = assertCondition.value;
+                if (assertExpected.value) action.assert_expected = assertExpected.value;
+            }
             emit('save', action);
         };
 
-        return { type, elementId, text, key, url, direction, seconds, showElement, showText, showKey, showUrl, showDirection, showSeconds, reset, save };
+        return { type, elementId, text, key, url, direction, seconds, assertCondition, assertExpected, showElement, showText, showKey, showUrl, showDirection, showSeconds, showAssert, reset, save };
     },
     template: `
         <div class="modal" :class="{active: visible}">
@@ -99,6 +108,7 @@ const StepModal = {
                         <option value="screenshot">screenshot</option>
                         <option value="wait">wait</option>
                         <option value="hover">hover</option>
+                        <option value="assert">assert</option>
                     </select>
                 </div>
                 <div class="modal-row" v-show="showElement">
@@ -129,6 +139,21 @@ const StepModal = {
                 <div class="modal-row" v-show="showSeconds">
                     <label>Seconds</label>
                     <input type="number" v-model="seconds" min="0">
+                </div>
+                <div class="modal-row" v-show="showAssert">
+                    <label>Assert condition</label>
+                    <select v-model="assertCondition" style="margin-bottom:6px;">
+                        <option value="">-- Выберите --</option>
+                        <option value="url_contains('/path')">URL contains '/path'</option>
+                        <option value="element_exists('#id')">Element exists '#id'</option>
+                        <option value="text_contains('text')">Text contains 'text'</option>
+                        <option value="title_is('Title')">Title is 'Title'</option>
+                    </select>
+                    <input type="text" v-model="assertCondition" placeholder="Или введите вручную..." style="width:100%;">
+                </div>
+                <div class="modal-row" v-show="showAssert">
+                    <label>Expected value (opt)</label>
+                    <input type="text" v-model="assertExpected" placeholder="expected">
                 </div>
                 <div class="modal-btns">
                     <button class="secondary" @click="$emit('close')">Cancel</button>
@@ -226,10 +251,6 @@ const FlowPanel = {
                 const ro = new ResizeObserver(() => fitView({ padding: 0.2 }));
                 ro.observe(panelRef.value);
             }
-            if (panelRef.value && typeof ResizeObserver !== 'undefined') {
-                // ResizeObserver disabled
-                ro.observe(panelRef.value);
-            }
         });
 
         return {
@@ -321,6 +342,20 @@ createApp({
         const modalEditIndex = ref(null);
         const modalInitial = ref({});
 
+        // Variables state
+        const scenarioVariables = ref([]);
+        const showVariables = ref(false);
+
+        // Screenshot overlay state
+        const elementBboxes = ref([]);
+        const computedBboxes = computed(() => elementBboxes.value);
+        const hoveredElementId = ref(null);
+        const screenshotZoom = ref(1);
+        const screenshotOffset = ref({x: 0, y: 0});
+        const screenshotScale = ref(1);
+        let isDraggingScreenshot = false;
+        let dragStartScreenshot = {x: 0, y: 0};
+
         // Sequence state
         const sequences = ref([]);
         const currentSequenceId = ref(null);
@@ -398,12 +433,28 @@ createApp({
 
         const refreshScreenshot = async () => {
             try {
-                const res = await apiPost('/screenshot_annotated', {});
-                if (!res.image) {
+                // Загружаем чистый скриншот (без Python overlay) + элементы отдельно
+                const [shotRes, elementsRes] = await Promise.all([
+                    apiGet('/screenshot'),
+                    apiGet('/elements')
+                ]);
+                // Debug: console.log('[refreshScreenshot] elements:', Object.keys(elementsRes.map || {}).length);
+                if (!shotRes.image) {
                     throw new Error('Сервер вернул пустое изображение');
                 }
-                setScreenshot('data:image/jpeg;base64,' + res.image);
-                elements.value = res.elements || {};
+                setScreenshot('data:image/jpeg;base64,' + shotRes.image);
+                elements.value = elementsRes.map || {};
+                // Извлекаем bbox из элементов для overlay
+                if (elementsRes.map) {
+                    const newBboxes = Object.entries(elementsRes.map).map(([id, info]) => ({
+                        id,
+                        tag: info.tag,
+                        text: (info.text || '').slice(0, 30),
+                        bbox: [info.x, info.y, info.width, info.height]
+                    })).filter(item => item.bbox.every(v => v != null));
+                    // console.log('[refreshScreenshot] bboxes:', newBboxes.length);
+                    elementBboxes.value = newBboxes;
+                }
                 status.value = '✅ Обновлено: ' + new Date().toLocaleTimeString();
             } catch (e) {
                 console.error('screenshot error', e);
@@ -472,6 +523,31 @@ createApp({
             if (!id) return;
             await apiPost('/scenario/select', { scenario_id: id });
             currentScenarioId.value = id;
+            await loadVariables(id);
+        };
+
+        const loadVariables = async (scenarioId) => {
+            const data = await apiPost('/scenario/variables/get', { scenario_id: scenarioId });
+            scenarioVariables.value = (data.variables || []).map(v => ({ name: v.name || '', default_value: v.default_value || '', description: v.description || '' }));
+        };
+
+        const saveVariables = async () => {
+            if (!currentScenarioId.value) return;
+            const payload = scenarioVariables.value.filter(v => v.name.trim() !== '').map(v => ({
+                name: v.name.trim(),
+                default_value: v.default_value,
+                description: v.description
+            }));
+            await apiPost('/scenario/variables/set', { scenario_id: currentScenarioId.value, variables: payload });
+        };
+
+        const addVariable = () => {
+            scenarioVariables.value.push({ name: '', default_value: '', description: '' });
+        };
+
+        const removeVariable = (idx) => {
+            scenarioVariables.value.splice(idx, 1);
+            saveVariables();
         };
 
         const createScenario = async () => {
@@ -606,6 +682,62 @@ createApp({
             closeModal();
         };
 
+        const addStepToCurrent = async (action) => {
+            const sc = currentScenario.value;
+            if (!sc) return alert('Сначала выберите сценарий');
+            const data = await apiPost('/scenario/step/add', { scenario_id: sc.id, action });
+            if (data.status === 'ok') sc.steps.push(action);
+        };
+
+        const loadElementBboxes = async () => {
+            const res = await fetch('/elements_with_bboxes', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                elementBboxes.value = Object.entries(data.elements || {}).map(([id, info]) => ({ id, ...info }));
+            }
+        };
+
+        const onScreenshotLoad = () => {
+            console.log('[onScreenshotLoad] called');
+            // Вычисляем масштаб отображения скриншота
+            const img = document.querySelector('.screenshot-wrap img');
+            console.log('[onScreenshotLoad] img:', img ? {nw: img.naturalWidth, cw: img.clientWidth} : 'null');
+            if (img && img.naturalWidth > 0) {
+                screenshotScale.value = img.clientWidth / img.naturalWidth;
+            }
+            loadElementBboxes();
+        };
+
+        const onScreenshotElementClick = (id, info) => {
+            // Выполняем реальный клик в браузере + обновляем lastElementDisplayId для typeText
+            sendAction({ action_type: 'click', element_display_id: parseInt(id) });
+        };
+
+        const onScreenshotWheel = (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            screenshotZoom.value = Math.max(0.5, Math.min(3, screenshotZoom.value + delta));
+        };
+
+        const onScreenshotMouseDown = (e) => {
+            isDraggingScreenshot = true;
+            dragStartScreenshot = { x: e.clientX - screenshotOffset.value.x, y: e.clientY - screenshotOffset.value.y };
+        };
+
+        const onScreenshotMouseMove = (e) => {
+            if (!isDraggingScreenshot) return;
+            screenshotOffset.value = { x: e.clientX - dragStartScreenshot.x, y: e.clientY - dragStartScreenshot.y };
+        };
+
+        const onScreenshotMouseUp = () => {
+            isDraggingScreenshot = false;
+        };
+
+        const screenshotTransformStyle = computed(() => ({
+            transform: 'translate(' + screenshotOffset.value.x + 'px, ' + screenshotOffset.value.y + 'px) scale(' + screenshotZoom.value + ')',
+            transformOrigin: 'top left'
+        }));
+
         const clearHighlights = () => {
             stepHighlights.value = {};
         };
@@ -634,7 +766,11 @@ createApp({
                         }
                         break;
                     case 'step_result':
-                        stepHighlights.value = { ...stepHighlights.value, [data.index]: data.error ? 'step-error' : 'step-success' };
+                        let highlightClass = data.error ? 'step-error' : 'step-success';
+                        if (data.assert) {
+                            highlightClass = data.assert.passed ? 'assert-pass' : 'assert-fail';
+                        }
+                        stepHighlights.value = { ...stepHighlights.value, [data.index]: highlightClass };
                         break;
                     case 'finish':
                         replayRunning.value = false;
@@ -921,6 +1057,12 @@ createApp({
             await loadSequences();
         });
 
+        watch(screenshot, () => {
+            nextTick(() => {
+                onScreenshotLoad();
+            });
+        });
+
         return {
             url, screenshot, elements, status, activeTab,
             scenarios, currentScenarioId, currentScenario,
@@ -929,6 +1071,9 @@ createApp({
             allTags, scenarioSearch, scenarioTag, filteredScenarios,
             autoRecordEnabled, replayDelay, replayRunning, stepHighlights,
             modalVisible, modalEditIndex, modalInitial,
+            scenarioVariables, showVariables, loadVariables, saveVariables, addVariable, removeVariable,
+            elementBboxes, computedBboxes, hoveredElementId, screenshotZoom, screenshotOffset, screenshotScale, screenshotTransformStyle,
+            onScreenshotLoad, onScreenshotElementClick, onScreenshotWheel, onScreenshotMouseDown, onScreenshotMouseMove, onScreenshotMouseUp,
             agentRunning, lastManualAction,
             navigate, sendAction, takeScreenshot, typeText, refreshScreenshot, switchTab,
             createScenario, selectScenario, renameScenario, deleteScenario,
@@ -957,7 +1102,40 @@ createApp({
                 <div class="main-inner-grid">
                     <div class="left-col">
                         <div class="panel screenshot-wrap">
-                            <img :src="screenshot" alt="Annotated screenshot">
+                            <div style="position:relative; display:inline-block; border:1px solid #ccc; overflow:hidden; cursor:grab;"
+                                 @wheel="onScreenshotWheel"
+                                 @mousedown="onScreenshotMouseDown"
+                                 @mousemove="onScreenshotMouseMove"
+                                 @mouseup="onScreenshotMouseUp"
+                                 @mouseleave="onScreenshotMouseUp">
+                                <div :style="screenshotTransformStyle">
+                                    <img :src="screenshot" alt="Annotated screenshot" @load="onScreenshotLoad" style="display:block;" draggable="false">
+                                    <div v-for="info in computedBboxes" :key="info.id"
+                                         :style="{
+                                             position:'absolute',
+                                             left: (info.bbox[0] * screenshotScale) + 'px',
+                                             top: (info.bbox[1] * screenshotScale) + 'px',
+                                             width: (info.bbox[2] * screenshotScale) + 'px',
+                                             height: (info.bbox[3] * screenshotScale) + 'px',
+                                             border: '2px solid rgba(0,150,255,0.6)',
+                                             background: hoveredElementId === info.id ? 'rgba(0,150,255,0.25)' : 'transparent',
+                                             cursor: 'pointer',
+                                             pointerEvents: 'auto',
+                                             display: 'flex',
+                                             alignItems: 'flex-start',
+                                             justifyContent: 'flex-start',
+                                             zIndex: 10,
+                                         }"
+                                         @mouseenter="hoveredElementId = info.id"
+                                         @mouseleave="hoveredElementId = null"
+                                         @click="onScreenshotElementClick(info.id, info)">
+                                        <span style="background:rgba(0,150,255,0.85); color:#fff; font-size:10px; padding:1px 4px; border-radius:0 0 3px 0; pointer-events:none;">
+                                            {{ info.id }}
+                                        </span>
+                                    </div>
+                                    <!-- element overlays rendered by v-for above -->
+                                </div>
+                            </div>
                             <div class="status">{{ status }}</div>
                         </div>
                         <div class="panel steps-panel">
@@ -988,6 +1166,23 @@ createApp({
                             <div style="margin-top:8px; display:flex; align-items:center; gap:8px; font-size:12px;">
                                 <label>Delay between steps:</label>
                                 <input type="number" v-model.number="replayDelay" min="0" step="0.1" style="width:60px; padding:4px;"> s
+                            </div>
+                            <div style="margin-top:12px; border-top:1px solid #eee; padding-top:10px;">
+                                <button @click="showVariables = !showVariables" style="font-size:12px; padding:4px 10px;" :disabled="!currentScenarioId">
+                                    🔧 Переменные ({{ scenarioVariables.length }})
+                                </button>
+                                <div v-if="showVariables" style="margin-top:6px; border:1px solid #ddd; padding:8px; border-radius:4px; background:#fafafa;">
+                                    <div v-for="(v, idx) in scenarioVariables" :key="idx" style="display:flex; gap:4px; margin-bottom:4px; align-items:center;">
+                                        <input v-model="v.name" placeholder="name" style="width:80px; font-size:11px; padding:3px;" @blur="saveVariables">
+                                        <input v-model="v.default_value" placeholder="default" style="width:100px; font-size:11px; padding:3px;" @blur="saveVariables">
+                                        <input v-model="v.description" placeholder="desc" style="flex:1; font-size:11px; padding:3px;" @blur="saveVariables">
+                                        <button @click="removeVariable(idx)" style="font-size:10px; color:#c00; padding:2px 6px;">×</button>
+                                    </div>
+                                    <button @click="addVariable" style="font-size:11px; margin-top:4px; padding:3px 8px;">+ Добавить</button>
+                                    <div style="font-size:10px; color:#666; margin-top:6px;">
+                                        Используйте <code>${name}</code> в шагах для подстановки
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="panel flow-panel-wrap">
@@ -1022,7 +1217,13 @@ createApp({
                             <div class="panel">
                                 <div class="section-title">Элементы</div>
                                 <div class="elements-grid">
-                                    <button class="el-btn" v-for="(info, id) in elements" :key="id" @click="sendAction({action_type:'click', element_display_id: parseInt(id)})">
+                                    <button class="el-btn"
+                                            v-for="(info, id) in elements"
+                                            :key="id"
+                                            :class="{highlighted: hoveredElementId === id}"
+                                            @mouseenter="hoveredElementId = id"
+                                            @mouseleave="hoveredElementId = null"
+                                            @click="sendAction({action_type:'click', element_display_id: parseInt(id)})">
                                         <span class="num">{{ id }}</span>{{ info.tag }}: {{ info.text || '' }}
                                     </button>
                                 </div>

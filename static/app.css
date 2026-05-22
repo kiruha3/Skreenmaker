@@ -25,6 +25,7 @@ h1 { font-size: 20px; margin-bottom: 12px; }
 .elements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; }
 .el-btn { padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; cursor: pointer; font-size: 12px; text-align: left; word-break: break-word; }
 .el-btn:hover { background: #e9f3ff; border-color: #007bff; }
+.el-btn.highlighted { background: #e9f3ff; border-color: #007bff; box-shadow: 0 0 0 2px rgba(0,123,255,0.3); }
 .el-btn .num { font-weight: bold; color: #007bff; margin-right: 4px; }
 .section-title { font-size: 14px; font-weight: 600; margin: 12px 0 8px; }
 .quick-btns { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -111,6 +112,8 @@ h1 { font-size: 20px; margin-bottom: 12px; }
 .step-row.active-step { background: #e9f3ff; border-left: 3px solid #007bff; }
 .step-row.step-success { background: #f0fff4; border-left: 3px solid #28a745; }
 .step-row.step-error { background: #fff5f5; border-left: 3px solid #dc3545; }
+.step-row.assert-pass { background: #f0fff4; border-left: 3px solid #22c55e; }
+.step-row.assert-fail { background: #fff5f5; border-left: 3px solid #ef4444; }
 
 /* Modal */
 .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.35); align-items: center; justify-content: center; }

@@ -145,6 +145,14 @@ class BrowserSession:
             await self.controller.set_dialog_action("accept")
             return {"status": "ok", "observation": "Alert will be accepted"}
 
+        if act.action_type == "assert":
+            result = await self.controller.execute_assert(act.assert_condition or "", act.assert_expected)
+            return {
+                "status": "ok" if result["passed"] else "error",
+                "observation": result["message"],
+                "assert_result": result,
+            }
+
         return {"status": "error", "observation": f"Unsupported action {act.action_type}"}
 
     async def screenshot_base64(self) -> str:
