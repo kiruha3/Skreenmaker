@@ -6,6 +6,7 @@ from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 from src.element_tracker import TrackedElement, track_elements
 from src.page_parser import format_text_snapshot
 from src.wait_utils import smart_wait
+from src.actions import ActionResult
 
 
 class BrowserController:
@@ -159,6 +160,18 @@ class BrowserController:
             ];
             const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
             const results = [];
+            const getDomPath = (el) => {
+                const path = [];
+                let curr = el;
+                while (curr && curr !== document.body) {
+                    let seg = curr.tagName.toLowerCase();
+                    if (curr.id) { seg += '#' + curr.id; path.unshift(seg); break; }
+                    if (curr.className) seg += '.' + Array.from(curr.classList).slice(0,2).join('.');
+                    path.unshift(seg);
+                    curr = curr.parentElement;
+                }
+                return path.join(' > ');
+            };
             for (const el of nodes) {
                 const rect = el.getBoundingClientRect();
                 if (rect.width < 5 || rect.height < 5) continue;
@@ -167,9 +180,8 @@ class BrowserController:
                 const style = window.getComputedStyle(el);
                 if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
                 let tag = el.tagName.toLowerCase();
-                if (el.hasAttribute('role')) {
-                    tag = el.getAttribute('role');
-                }
+                const role = el.getAttribute('role') || '';
+                if (role) tag = role;
                 const txt = (el.innerText || el.textContent || el.value || el.placeholder || '').trim().slice(0, 50);
                 let sel = el.tagName.toLowerCase();
                 if (el.id) sel = '#' + el.id;
@@ -177,6 +189,7 @@ class BrowserController:
                     const cls = Array.from(el.classList).slice(0,2).join('.');
                     if (cls) sel = el.tagName.toLowerCase() + '.' + cls;
                 }
+                const labelEl = el.labels && el.labels[0];
                 results.push({
                     tag: tag,
                     text: txt,
@@ -186,6 +199,14 @@ class BrowserController:
                     width: rect.width,
                     height: rect.height,
                     is_visible: true,
+                    role: role,
+                    accessible_name: el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || (labelEl ? labelEl.innerText.trim().slice(0, 50) : ''),
+                    label: (labelEl ? labelEl.innerText.trim().slice(0, 50) : ''),
+                    placeholder: el.placeholder || '',
+                    testid: el.getAttribute('data-testid') || el.getAttribute('data-test-id') || '',
+                    href: el.href || '',
+                    dom_path: getDomPath(el),
+                    enabled: !el.disabled,
                 });
             }
             return results;
@@ -204,68 +225,160 @@ class BrowserController:
         snapshot = format_text_snapshot(url, title, elements)
         return snapshot, elements_map
 
-    async def click_by_index(self, index: int):
+    async def _capture_state(self) -> dict:
+        """Фиксирует текущее состояние страницы."""
+        if not self._page:
+            return {"url": "", "dom_hash": "", "screenshot": None}
+        url = self._page.url
+        # DOM hash через content (с защитой от null при навигации)
+        dom_hash = ""
+        try:
+            dom_text = await self._page.evaluate("() => document.body ? document.body.innerText : ''")
+            import hashlib
+            dom_hash = hashlib.md5(dom_text.encode()).hexdigest()[:8]
+        except Exception:
+            pass
+        screenshot_path = None
+        try:
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                screenshot_path = tmp.name
+            await self._page.screenshot(path=screenshot_path, type="jpeg")
+        except Exception:
+            pass
+        return {"url": url, "dom_hash": dom_hash, "screenshot": screenshot_path}
+
+    async def _resolve_locator(self, element: TrackedElement):
+        """Resolver: element descriptor -> Playwright locator with fallback chain."""
         if not self._page:
             raise RuntimeError("Browser not launched")
-        js = """
-        (idx) => {
-            const selectors = [
-                "a", "button", "input", "textarea", "select",
-                "label[for]", "[contenteditable='true']",
-                "[role='button']", "[role='link']", "[role='checkbox']",
-                "[role='radio']", "[role='tab']", "[role='menuitem']",
-                "[role='switch']", "[role='searchbox']", "[role='textbox']",
-            ];
-            const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
-            const visible = [];
-            for (const el of nodes) {
-                const rect = el.getBoundingClientRect();
-                const style = window.getComputedStyle(el);
-                if (rect.width < 5 || rect.height < 5) continue;
-                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
-                visible.push(el);
-            }
-            const el = visible[idx - 1];
-            if (!el) return false;
-            el.click();
-            return true;
-        }
-        """
-        result = await self._page.evaluate(js, index)
-        if not result:
-            raise RuntimeError(f"Element with index {index} not found or not clickable")
-        await smart_wait(self._page, "click")
+        page = self._page
+        locators = element.candidate_locators
+        for loc in locators:
+            ltype = loc["type"]
+            value = loc["value"]
+            try:
+                if ltype == "test_id":
+                    return page.get_by_test_id(value), ltype, False, None
+                elif ltype == "role":
+                    # value format: "role[name='name']"
+                    role, name = value.split("[name='", 1)
+                    name = name.rstrip("']")
+                    return page.get_by_role(role.strip(), name=name), ltype, False, None
+                elif ltype == "label":
+                    return page.get_by_label(value), ltype, False, None
+                elif ltype == "placeholder":
+                    return page.get_by_placeholder(value), ltype, False, None
+                elif ltype == "text":
+                    return page.get_by_text(value), ltype, False, None
+                elif ltype == "css":
+                    return page.locator(value), ltype, False, None
+                elif ltype == "href":
+                    return page.locator(f'a[href="{value}"]'), ltype, False, None
+                elif ltype == "dom_path":
+                    return page.locator(value), ltype, False, None
+                elif ltype == "coordinates":
+                    return None, ltype, True, "All locators failed, using coordinates"
+            except Exception:
+                continue
+        return None, "coordinates", True, "No locators matched"
+
+    async def click_element(self, element: TrackedElement):
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        before = await self._capture_state()
+        locator, used_locator, fallback_used, fallback_reason = await self._resolve_locator(element)
+        try:
+            if locator:
+                await locator.click()
+            else:
+                await self._page.mouse.click(element.cx, element.cy)
+            await smart_wait(self._page, "click")
+        except Exception as exc:
+            return ActionResult(
+                status="error",
+                observation="Click failed",
+                error=str(exc),
+                url=before["url"],
+                used_locator=used_locator,
+                fallback_used=fallback_used,
+                fallback_reason=fallback_reason,
+            )
+        after = await self._capture_state()
+        changed = before["url"] != after["url"] or before["dom_hash"] != after["dom_hash"]
+        return ActionResult(
+            status="ok",
+            observation="Clicked element",
+            url=after["url"],
+            changed=changed,
+            before_screenshot=before["screenshot"],
+            after_screenshot=after["screenshot"],
+            used_locator=used_locator,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+        )
+
+    async def type_element(self, element: TrackedElement, text: str):
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        before = await self._capture_state()
+        locator, used_locator, fallback_used, fallback_reason = await self._resolve_locator(element)
+        try:
+            if locator:
+                await locator.fill(text)
+            else:
+                await self._page.mouse.click(element.cx, element.cy)
+                await self._page.keyboard.type(text)
+            await smart_wait(self._page, "type")
+        except Exception as exc:
+            return ActionResult(
+                status="error",
+                observation="Type failed",
+                error=str(exc),
+                url=before["url"],
+                used_locator=used_locator,
+                fallback_used=fallback_used,
+                fallback_reason=fallback_reason,
+            )
+        after = await self._capture_state()
+        # Проверяем post-action value
+        post_value = ""
+        try:
+            post_value = await self._page.evaluate("(sel) => document.querySelector(sel)?.value || ''", element.selector)
+        except Exception:
+            pass
+        changed = before["dom_hash"] != after["dom_hash"] or post_value == text
+        return ActionResult(
+            status="ok",
+            observation=f"Typed '{text}' (post-value: {post_value})",
+            url=after["url"],
+            changed=changed,
+            before_screenshot=before["screenshot"],
+            after_screenshot=after["screenshot"],
+            used_locator=used_locator,
+            fallback_used=fallback_used,
+            fallback_reason=fallback_reason,
+        )
+
+    async def click_by_index(self, index: int):
+        """Legacy method — resolves element by index then uses locator chain."""
+        if not self._page:
+            raise RuntimeError("Browser not launched")
+        elements, elements_map = await self.get_interactive_elements()
+        element = elements_map.get(index)
+        if not element:
+            raise RuntimeError(f"Element with index {index} not found")
+        return await self.click_element(element)
 
     async def type_by_index(self, index: int, text: str):
+        """Legacy method — resolves element by index then uses locator chain."""
         if not self._page:
             raise RuntimeError("Browser not launched")
-        js = """
-        (idx) => {
-            const selectors = [
-                "input", "textarea", "select",
-                "[contenteditable='true']",
-                "[role='searchbox']", "[role='textbox']",
-            ];
-            const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
-            const visible = [];
-            for (const el of nodes) {
-                const rect = el.getBoundingClientRect();
-                const style = window.getComputedStyle(el);
-                if (rect.width < 5 || rect.height < 5) continue;
-                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
-                visible.push(el);
-            }
-            const el = visible[idx - 1];
-            if (!el) return false;
-            el.focus();
-            return true;
-        }
-        """
-        result = await self._page.evaluate(js, index)
-        if not result:
+        elements, elements_map = await self.get_interactive_elements()
+        element = elements_map.get(index)
+        if not element:
             raise RuntimeError(f"Input element with index {index} not found")
-        await self._page.keyboard.type(text)
-        await smart_wait(self._page, "type")
+        return await self.type_element(element, text)
 
     async def _find_element_by_fallback(self, selector: Optional[str], stable_hash: Optional[str]):
         """Ищет элемент по stable_hash или selector среди текущих интерактивных элементов."""

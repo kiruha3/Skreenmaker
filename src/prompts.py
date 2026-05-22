@@ -68,7 +68,20 @@ def build_elements_list(elements_map: dict) -> str:
     for display_id, info in elements_map.items():
         text = info.get("text", "")
         tag = info.get("tag", "")
-        line = f"  {display_id}. [{tag}] {text}"
+        parts = [f"[{tag}]"]
+        if info.get("role"):
+            parts.append(f"role={info['role']}")
+        if info.get("label"):
+            parts.append(f"label='{info['label']}'")
+        if info.get("placeholder"):
+            parts.append(f"placeholder='{info['placeholder']}'")
+        if info.get("testid"):
+            parts.append(f"testid={info['testid']}")
+        if info.get("href"):
+            parts.append(f"href={info['href']}")
+        if text:
+            parts.append(f"text='{text}'")
+        line = f"  {display_id}. " + " ".join(parts)
         lines.append(line)
     if not lines:
         return "  (нет интерактивных элементов)"

@@ -15,6 +15,14 @@ class TrackedElement:
     width: float
     height: float
     is_visible: bool
+    role: str = ""
+    accessible_name: str = ""
+    label: str = ""
+    placeholder: str = ""
+    testid: str = ""
+    href: str = ""
+    dom_path: str = ""
+    enabled: bool = True
 
     @property
     def cx(self) -> float:
@@ -24,21 +32,50 @@ class TrackedElement:
     def cy(self) -> float:
         return self.y + self.height / 2
 
+    @property
+    def candidate_locators(self) -> List[Dict[str, str]]:
+        """Ordered list of candidate locators for Playwright resolver."""
+        locators: List[Dict[str, str]] = []
+        if self.testid:
+            locators.append({"type": "test_id", "value": self.testid})
+        if self.role and self.accessible_name:
+            locators.append({"type": "role", "value": f"{self.role}[name='{self.accessible_name}']"})
+        if self.label:
+            locators.append({"type": "label", "value": self.label})
+        if self.placeholder:
+            locators.append({"type": "placeholder", "value": self.placeholder})
+        if self.text:
+            locators.append({"type": "text", "value": self.text})
+        if self.selector and self.selector.startswith("#"):
+            locators.append({"type": "css", "value": self.selector})
+        if self.href:
+            locators.append({"type": "href", "value": self.href})
+        if self.dom_path:
+            locators.append({"type": "dom_path", "value": self.dom_path})
+        locators.append({"type": "coordinates", "value": f"{self.cx},{self.cy}"})
+        return locators
+
 
 def _quantize(value: float, step: float = 10.0) -> int:
     return int(round(value / step) * step)
 
 
-def compute_element_hash(tag: str, x: float, y: float, width: float, height: float, text: str) -> str:
-    """
-    Генерирует стабильный хеш на основе грубых координат и текста.
-    """
+def compute_element_hash(
+    tag: str,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    text: str,
+    testid: str = "",
+) -> str:
+    """Генерирует стабильный хеш на основе грубых координат и текста."""
     qx = _quantize(x)
     qy = _quantize(y)
     qw = _quantize(width)
     qh = _quantize(height)
     safe_text = text.strip()[:30]
-    raw = f"{tag}|{qx}|{qy}|{qw}|{qh}|{safe_text}"
+    raw = f"{tag}|{qx}|{qy}|{qw}|{qh}|{safe_text}|{testid}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
 
 
@@ -95,6 +132,7 @@ def track_elements(raw_elements: List[Dict[str, any]]) -> Tuple[List[TrackedElem
             width=el.get("width", 0),
             height=el.get("height", 0),
             text=el.get("text", ""),
+            testid=el.get("testid", ""),
         )
         te = TrackedElement(
             display_id=display_id,
@@ -107,6 +145,14 @@ def track_elements(raw_elements: List[Dict[str, any]]) -> Tuple[List[TrackedElem
             width=el.get("width", 0),
             height=el.get("height", 0),
             is_visible=el.get("is_visible", True),
+            role=el.get("role", ""),
+            accessible_name=el.get("accessible_name", ""),
+            label=el.get("label", ""),
+            placeholder=el.get("placeholder", ""),
+            testid=el.get("testid", ""),
+            href=el.get("href", ""),
+            dom_path=el.get("dom_path", ""),
+            enabled=el.get("enabled", True),
         )
         tracked.append(te)
         display_map[display_id] = te

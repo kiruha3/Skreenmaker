@@ -15,7 +15,14 @@ app = FastAPI(title="SkreenMaker Browser Server")
 
 # Глобальная сессия браузера
 _session: Optional["BrowserSession"] = None
-_session_lock = asyncio.Lock()
+_session_lock: Optional[asyncio.Lock] = None
+
+
+def _get_session_lock() -> asyncio.Lock:
+    global _session_lock
+    if _session_lock is None:
+        _session_lock = asyncio.Lock()
+    return _session_lock
 
 
 class BrowserSession:
@@ -181,7 +188,19 @@ class BrowserSession:
         await self.launch()
         elements, elements_map = await self.controller.get_interactive_elements()
         return {
-            "elements": [{"display_id": e.display_id, "tag": e.tag, "text": e.text, "hash": e.stable_hash} for e in elements],
+            "elements": [{
+                "display_id": e.display_id,
+                "tag": e.tag,
+                "text": e.text,
+                "hash": e.stable_hash,
+                "role": e.role,
+                "label": e.label,
+                "placeholder": e.placeholder,
+                "testid": e.testid,
+                "href": e.href,
+                "enabled": e.enabled,
+                "locators": e.candidate_locators,
+            } for e in elements],
             "map": {str(k): v for k, v in elements_map.items()},
         }
 
@@ -223,7 +242,7 @@ class ActRequest(BaseModel):
 @app.post("/launch")
 async def launch(req: LaunchRequest):
     global _session
-    async with _session_lock:
+    async with _get_session_lock():
         _session = BrowserSession(req.viewport_width, req.viewport_height)
         await _session.launch(headless=req.headless)
     return {"status": "ok"}
@@ -232,7 +251,7 @@ async def launch(req: LaunchRequest):
 @app.post("/navigate")
 async def navigate(req: NavigateRequest):
     sess = get_session()
-    async with _session_lock:
+    async with _get_session_lock():
         await sess.navigate(req.url)
     return {"status": "ok", "url": req.url}
 
@@ -240,7 +259,7 @@ async def navigate(req: NavigateRequest):
 @app.post("/act")
 async def act(req: ActRequest):
     sess = get_session()
-    async with _session_lock:
+    async with _get_session_lock():
         result = await sess.act(req.action)
     return result
 
@@ -281,15 +300,9 @@ async def text_snapshot():
 @app.post("/close")
 async def close():
     sess = get_session()
-    async with _session_lock:
+    async with _get_session_lock():
         await sess.close()
     return {"status": "ok"}
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    sess = get_session()
-    await sess.close()
 
 
 if __name__ == "__main__":

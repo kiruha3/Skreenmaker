@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Union, Annotated
+from typing import Literal, Optional, Union, Annotated, Dict, Any
 from pydantic import BaseModel, Field, field_validator, TypeAdapter
 
 
@@ -124,6 +124,24 @@ class FinishAction(BaseAction):
 class FailAction(BaseAction):
     action_type: Literal["fail"] = "fail"
     reason: Optional[str] = Field(default=None, description="Причина неудачи")
+
+
+class ActionResult(BaseModel):
+    """Единый контракт результата действия."""
+    status: str = Field(default="ok", description="ok | error | unchanged")
+    observation: str = Field(default="", description="Что произошло")
+    screenshot: Optional[str] = Field(default=None, description="Путь к скриншоту after")
+    url: Optional[str] = Field(default=None, description="URL после действия")
+    changed: bool = Field(default=False, description="Изменилась ли страница")
+    error: Optional[str] = Field(default=None, description="Ошибка, если есть")
+    action: Optional[Dict[str, Any]] = Field(default=None, description="Выполненное действие")
+    before_screenshot: Optional[str] = Field(default=None, description="Путь к скриншоту before")
+    after_screenshot: Optional[str] = Field(default=None, description="Путь к скриншоту after")
+    diff_screenshot: Optional[str] = Field(default=None, description="Путь к diff изображению")
+    used_locator: Optional[str] = Field(default=None, description="Какой locator сработал")
+    fallback_used: bool = Field(default=False, description="Использован ли fallback")
+    fallback_reason: Optional[str] = Field(default=None, description="Причина fallback")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Дополнительные данные")
 
 
 # Discriminated union для строгой валидации

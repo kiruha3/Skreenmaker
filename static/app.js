@@ -379,28 +379,57 @@ createApp({
             }
         };
 
+        const setErrorScreenshot = (message) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 360;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#c00';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠ Ошибка загрузки скриншота', canvas.width / 2, 160);
+            ctx.fillStyle = '#333';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(message, canvas.width / 2, 190);
+            screenshot.value = canvas.toDataURL('image/png');
+        };
+
         const refreshScreenshot = async () => {
-            const res = await apiPost('/screenshot_annotated', {});
-            setScreenshot('data:image/jpeg;base64,' + res.image);
-            elements.value = res.elements || {};
-            status.value = 'Обновлено: ' + new Date().toLocaleTimeString();
+            try {
+                const res = await apiPost('/screenshot_annotated', {});
+                if (!res.image) {
+                    throw new Error('Сервер вернул пустое изображение');
+                }
+                setScreenshot('data:image/jpeg;base64,' + res.image);
+                elements.value = res.elements || {};
+                status.value = '✅ Обновлено: ' + new Date().toLocaleTimeString();
+            } catch (e) {
+                console.error('screenshot error', e);
+                setErrorScreenshot(e.message || 'Не удалось получить скриншот');
+                status.value = '❌ Ошибка скриншота: ' + (e.message || 'unknown');
+            }
         };
 
         const navigate = async () => {
-            await apiPost('/navigate', { url: url.value });
-            await refreshScreenshot();
-            lastManualAction.value = { action_type: 'navigate', url: url.value };
-            await maybeAutoRecord();
+            try {
+                await apiPost('/navigate', { url: url.value });
+                status.value = '⏳ Загрузка страницы…';
+                await refreshScreenshot();
+                lastManualAction.value = { action_type: 'navigate', url: url.value };
+                await maybeAutoRecord();
+            } catch (e) {
+                console.error('navigate error', e);
+                status.value = '❌ Ошибка перехода: ' + (e.message || 'unknown');
+                setErrorScreenshot('Ошибка навигации: ' + (e.message || 'unknown'));
+            }
         };
 
         const enrichAction = (action) => {
-            if (action.element_display_id != null) {
-                const info = elements.value[action.element_display_id];
-                if (info) {
-                    action.selector = info.selector || undefined;
-                    action.stable_hash = info.stable_hash || undefined;
-                }
-            }
+            // Ручной клик использует element_display_id напрямую (координаты).
+            // Fallback-поля (selector/stable_hash) не добавляем, чтобы сервер
+            // использовал click_by_coords вместо locator chain.
             return action;
         };
 
