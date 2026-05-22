@@ -126,3 +126,26 @@ async def test_type_with_fallback_by_stable_hash(browser):
     await browser.type_with_fallback(999, "fallback@example.com", stable_hash=email_el.stable_hash)
     value = await browser._page.input_value("#email")
     assert value == "fallback@example.com"
+
+
+@pytest.mark.asyncio
+async def test_get_interactive_elements_detects_pointer_cursor_divs(browser):
+    """Div elements with cursor:pointer (tree nodes, cards, custom buttons) must be detected."""
+    url = f"file:///{FIXTURES_DIR / 'tree_view.html'}"
+    await browser.navigate(url)
+    elements, elements_map = await browser.get_interactive_elements()
+    texts = [e.text for e in elements]
+    # tree-node divs with cursor:pointer
+    assert "Project Alpha" in texts
+    assert "Project Beta" in texts
+    # action-btn div with cursor:pointer
+    assert "Create New" in texts
+    # card div with cursor:pointer
+    assert "Card One" in texts
+    # Real button should also be detected
+    assert "Real Button" in texts
+    # plain-div (no cursor:pointer) should NOT be detected
+    assert "Not clickable" not in texts
+    # Should find 5 elements total: 2 tree-node + action-btn + card + button
+    # plain-div (no cursor:pointer) is correctly excluded
+    assert len(elements) == 5

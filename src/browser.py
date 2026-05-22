@@ -159,6 +159,7 @@ class BrowserController:
                 "[role='switch']", "[role='searchbox']", "[role='textbox']",
             ];
             const nodes = Array.from(document.querySelectorAll(selectors.join(", ")));
+            const seen = new Set(nodes);
             const results = [];
             const getDomPath = (el) => {
                 const path = [];
@@ -202,6 +203,50 @@ class BrowserController:
                     role: role,
                     accessible_name: el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || (labelEl ? labelEl.innerText.trim().slice(0, 50) : ''),
                     label: (labelEl ? labelEl.innerText.trim().slice(0, 50) : ''),
+                    placeholder: el.placeholder || '',
+                    testid: el.getAttribute('data-testid') || el.getAttribute('data-test-id') || '',
+                    href: el.href || '',
+                    dom_path: getDomPath(el),
+                    enabled: !el.disabled,
+                });
+            }
+            // Second pass: detect div/span/li/etc with cursor:pointer (custom clickable UI)
+            const extraTags = ["div", "span", "li", "section", "article", "td", "tr", "header", "footer", "aside", "nav", "main"];
+            for (const el of document.querySelectorAll(extraTags.join(", "))) {
+                if (seen.has(el)) continue;
+                const tagName = el.tagName.toLowerCase();
+                if (tagName === "body" || tagName === "html") continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.width < 10 || rect.height < 10) continue;
+                if (rect.right < 0 || rect.bottom < 0) continue;
+                if (rect.left > viewportWidth || rect.top > viewportHeight) continue;
+                // Skip elements that are larger than 80% of viewport (likely wrappers/containers)
+                if (rect.width > viewportWidth * 0.8 || rect.height > viewportHeight * 0.8) continue;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+                // Detect cursor:pointer or inline onclick handler
+                const hasPointerCursor = style.cursor === 'pointer';
+                const hasInlineClick = el.onclick !== null || el.getAttribute('onclick') !== null;
+                if (!hasPointerCursor && !hasInlineClick) continue;
+                let sel = el.tagName.toLowerCase();
+                if (el.id) sel = '#' + el.id;
+                else {
+                    const cls = Array.from(el.classList).slice(0,2).join('.');
+                    if (cls) sel = el.tagName.toLowerCase() + '.' + cls;
+                }
+                const txt = (el.innerText || el.textContent || '').trim().slice(0, 50);
+                results.push({
+                    tag: tagName,
+                    text: txt,
+                    selector: sel,
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                    is_visible: true,
+                    role: el.getAttribute('role') || '',
+                    accessible_name: el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || '',
+                    label: '',
                     placeholder: el.placeholder || '',
                     testid: el.getAttribute('data-testid') || el.getAttribute('data-test-id') || '',
                     href: el.href || '',

@@ -19,8 +19,9 @@
 - Zoom/pan support with `screenshotTransformStyle`
 - Click on overlay → `sendAction({action_type:'click', element_display_id})` → **real browser click** + updates `lastElementDisplayId` for `typeText`
 - Step is added to scenario **only when `autoRecordEnabled === true`** (`maybeAutoRecord`)
+- **Div/span/li/etc with `cursor:pointer`** now detected via second pass in `get_interactive_elements` (tree nodes, cards, custom buttons)
 - Clean screenshot (no Python-drawn overlay accumulation)
-- Tests: integrated into `test_ui_enhancements.py`
+- Tests: `test_ui_enhancements.py` (6 tests), `test_browser.py` (11 tests)
 
 #### Phase 3: Assertions MVP ✅
 - `assert` action type in `AgentAction`
